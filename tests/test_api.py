@@ -62,7 +62,7 @@ def test_admin_crea_zona(client, app):
 
 
 def test_admin_crea_reunion_multiarea(client, app):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json=_meeting_payload([3, 5]), headers=headers)
     assert response.status_code == 201
     assert response.get_json()["estado"] == "Pendiente"
@@ -87,7 +87,7 @@ def test_usuario_natural_no_puede_crear_reunion(client, app):
 
 
 def test_usuario_natural_ve_solo_sus_reuniones(client, app):
-    admin_headers = login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     client.post("/api/reuniones", json=_meeting_payload([4], start="10:30", end="11:30"), headers=admin_headers)
     user_headers = login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
@@ -98,7 +98,7 @@ def test_usuario_natural_ve_solo_sus_reuniones(client, app):
 
 
 def test_usuario_natural_acepta_reunion(client, app):
-    admin_headers = login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     user_headers = login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
     response = client.post(f"/api/reuniones/{created['id']}/aceptar", headers=user_headers)
@@ -107,7 +107,7 @@ def test_usuario_natural_acepta_reunion(client, app):
 
 
 def test_usuario_natural_rechaza_con_razon(client, app):
-    admin_headers = login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     user_headers = login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
     response = client.post(
@@ -120,7 +120,7 @@ def test_usuario_natural_rechaza_con_razon(client, app):
 
 
 def test_usuario_natural_no_rechaza_vacio(client, app):
-    admin_headers = login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     user_headers = login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
     response = client.post(f"/api/reuniones/{created['id']}/rechazar", json={"razon": ""}, headers=user_headers)
@@ -128,7 +128,7 @@ def test_usuario_natural_no_rechaza_vacio(client, app):
 
 
 def test_persona_no_puede_doble_horario(client, app):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     first = client.post("/api/reuniones", json=_meeting_payload([3]), headers=headers)
     assert first.status_code == 201
     second = client.post("/api/reuniones", json=_meeting_payload([3], start="09:30", end="10:30"), headers=headers)
@@ -136,7 +136,7 @@ def test_persona_no_puede_doble_horario(client, app):
 
 
 def test_zona_no_puede_doble_horario(client, app):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     first = client.post("/api/reuniones", json=_meeting_payload([3], zone_id=1), headers=headers)
     assert first.status_code == 201
     second = client.post("/api/reuniones", json=_meeting_payload([4], zone_id=1, start="09:30", end="10:30"), headers=headers)
@@ -160,7 +160,7 @@ def test_password_hash_no_aparece_en_json(client, app):
 
 
 def test_error_publico_no_filtra_stack_ni_sql(client, app):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json={"titulo": "sin datos"}, headers=headers)
     body = response.get_data(as_text=True).lower()
     assert response.status_code in (422, 500)
@@ -178,7 +178,7 @@ def test_logs_muestran_descripcion_humana(client, app):
 
 
 def test_creacion_reunion_genera_log_humano(client, app):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     client.post("/api/reuniones", json=_meeting_payload([3, 5]), headers=headers)
     with app.app_context():
         entry = LogSistema.query.filter_by(accion="creacion_reunion").order_by(LogSistema.id.desc()).first()
@@ -189,7 +189,7 @@ def test_creacion_reunion_genera_log_humano(client, app):
 
 
 def test_rechazo_reunion_genera_log_humano_con_razon(client, app):
-    admin_headers = login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     user_headers = login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
     client.post(
@@ -211,7 +211,7 @@ def test_admin_puede_buscar_usuarios_por_area(client):
 
 
 def test_secretaria_puede_buscar_todas_las_areas(client):
-    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
+    headers = login(client, "admin@empresa.local", "Admin123!")
     response = client.get("/api/usuarios/buscar?area_id=2&q=usuario", headers=headers)
     assert response.status_code == 200
 
@@ -223,19 +223,19 @@ def test_usuario_natural_no_puede_buscar_usuarios(client):
 
 
 def test_backend_rechaza_participantes_duplicados(client):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json=_meeting_payload([3, 3]), headers=headers)
     assert response.status_code == 422
 
 
 def test_backend_rechaza_participante_inexistente(client):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json=_meeting_payload([999]), headers=headers)
     assert response.status_code == 422
 
 
 def test_backend_exige_responsable_reunion(client):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     payload = _meeting_payload([3, 4])
     payload.pop("responsable_reunion_id")
     response = client.post("/api/reuniones", json=payload, headers=headers)
@@ -243,7 +243,7 @@ def test_backend_exige_responsable_reunion(client):
 
 
 def test_responsable_se_serializa_y_genera_historial(client):
-    headers = login(client, "admin@empresa.local", "Admin123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json=_meeting_payload([3, 4], responsible_id=4), headers=headers)
     meeting = response.get_json()
     assert meeting["responsable_reunion_id"] == 4

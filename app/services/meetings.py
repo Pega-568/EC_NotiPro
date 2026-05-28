@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta
 from flask import g
 
 from app.audit import log_event
-from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_SECRETARIA
+from app.constants import OPERATOR_ROLES, ROLE_AGENDADOR
 from app.errors import ConflictError, ForbiddenError, ValidationError
 from app.extensions import db
 from app.models import (
@@ -70,9 +70,9 @@ def _validate_responsable(
     if not responsable or responsable.estado != "Activo":
         raise ValidationError("Debe seleccionar un responsable de reunion activo.")
     participant_ids = {user.id for user in participants}
-    if responsable.id not in participant_ids and responsable.id != actor.id:
+    if responsable.id not in participant_ids:
         raise ValidationError(
-            "El responsable de reunion debe ser participante invitado o la persona que registra la reunion."
+            "El responsable de la reunión debe estar incluido en la lista de participantes."
         )
     return responsable
 
@@ -218,6 +218,32 @@ def serialize_meeting(meeting: Reunion) -> dict:
     }
 
 
+def sync_meeting_participants(meeting: Reunion, new_participant_ids: list[int]) -> None:
+    old_items = {item.usuario_id: item for item in meeting.participantes}
+    old_ids = set(old_items.keys())
+    new_ids = set(new_participant_ids)
+    
+    added_ids = new_ids - old_ids
+    removed_ids = old_ids - new_ids
+    
+    for uid in removed_ids:
+        db.session.delete(old_items[uid])
+        
+    for uid in added_ids:
+        db.session.add(
+            ReunionParticipante(
+                reunion_id=meeting.id,
+                usuario_id=uid,
+                estado_respuesta="Pendiente",
+            )
+        )
+    db.session.flush()
+    if added_ids:
+        _append_history(meeting, "participant_added", previous_status=meeting.estado)
+    if removed_ids:
+        _append_history(meeting, "participant_removed", previous_status=meeting.estado)
+
+
 def create_meeting(payload: dict) -> Reunion:
     actor = g.current_user
     _validate_actor_scope(actor)
@@ -238,11 +264,20 @@ def create_meeting(payload: dict) -> Reunion:
     participants = _validate_participants(participant_ids)
     responsable = _validate_responsable(int(payload["responsable_reunion_id"]), participants, actor)
 
+    if actor.role.nombre == ROLE_AGENDADOR:
+        for participant in participants:
+            if participant.area_id != actor.area_id:
+                raise ForbiddenError("El Agendador de área solo puede invitar a personas de su área.")
+
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
     hora_fin = datetime.strptime(payload["hora_fin"], "%H:%M").time()
     _validate_basic_schedule(fecha, hora_inicio, hora_fin)
     zone = _find_zone(int(payload["zona_id"]))
+    
+    if actor.role.nombre == ROLE_AGENDADOR and zone.area_id != actor.area_id:
+        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área.")
+        
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin)
     participant_conflict_ids = list({responsable.id, *participant_ids})
     _validate_person_conflicts(participant_conflict_ids, fecha, hora_inicio, hora_fin)
@@ -318,11 +353,20 @@ def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
     participant_ids = [int(value) for value in payload.get("participant_ids", [])]
     participants = _validate_participants(participant_ids)
     responsable = _validate_responsable(int(payload["responsable_reunion_id"]), participants, actor)
+    
+    if actor.role.nombre == ROLE_AGENDADOR:
+        for participant in participants:
+            if participant.area_id != actor.area_id:
+                raise ForbiddenError("El Agendador de área solo puede invitar a personas de su área.")
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
     hora_fin = datetime.strptime(payload["hora_fin"], "%H:%M").time()
     _validate_basic_schedule(fecha, hora_inicio, hora_fin)
     zone = _find_zone(int(payload["zona_id"]))
+    
+    if actor.role.nombre == ROLE_AGENDADOR and zone.area_id != actor.area_id:
+        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área.")
+        
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin, meeting_id=meeting.id)
     participant_conflict_ids = list({responsable.id, *participant_ids})
     _validate_person_conflicts(
@@ -342,16 +386,8 @@ def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
     meeting.hora_inicio = hora_inicio
     meeting.hora_fin = hora_fin
     meeting.prioridad = payload.get("prioridad", meeting.prioridad)
-    meeting.participantes.clear()
-    db.session.flush()
-    for participant in participants:
-        db.session.add(
-            ReunionParticipante(
-                reunion_id=meeting.id,
-                usuario_id=participant.id,
-                estado_respuesta="Pendiente",
-            )
-        )
+    
+    sync_meeting_participants(meeting, participant_ids)
     log_event(
         "modificacion_reunion",
         "reunion",

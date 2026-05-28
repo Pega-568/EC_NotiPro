@@ -146,7 +146,7 @@ class ReunionHistorial(db.Model):
     __tablename__ = "reunion_historial"
     __table_args__ = (
         CheckConstraint(
-            "tipo_evento IN ('created', 'updated', 'canceled', 'response', 'finalized')",
+            "tipo_evento IN ('created', 'updated', 'canceled', 'response', 'finalized', 'participant_added', 'participant_removed')",
             name="ck_reunion_historial_tipo",
         ),
         Index("ix_reunion_historial_reunion", "reunion_id", "changed_at"),
@@ -333,3 +333,111 @@ class UserSession(db.Model):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
 
     usuario: Mapped[Usuario] = relationship()
+
+
+class EmailTemplate(TimestampMixin, db.Model):
+    __tablename__ = "email_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    codigo: Mapped[str] = mapped_column(db.String(100), unique=True, nullable=False)
+    asunto_template: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    cuerpo_template: Mapped[str] = mapped_column(db.Text, nullable=False)
+    activo: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
+class Asistencia(TimestampMixin, db.Model):
+    __tablename__ = "asistencias"
+    __table_args__ = (
+        UniqueConstraint("reunion_id", "usuario_id", name="uq_asistencias_reunion_usuario"),
+        CheckConstraint(
+            "estado_asistencia IN ('Pendiente', 'Presente', 'Ausente', 'Justificada')",
+            name="ck_asistencias_estado",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reunion_id: Mapped[int] = mapped_column(ForeignKey("reuniones.id"), nullable=False)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    estado_asistencia: Mapped[str] = mapped_column(db.String(20), default="Pendiente", nullable=False)
+    marcada_at: Mapped[datetime | None]
+    observacion: Mapped[str | None] = mapped_column(db.String(500))
+
+    reunion: Mapped[Reunion] = relationship()
+    usuario: Mapped[Usuario] = relationship()
+
+
+class QrAsistenciaToken(TimestampMixin, db.Model):
+    __tablename__ = "qr_asistencia_tokens"
+    __table_args__ = (
+        CheckConstraint("estado IN ('Activo', 'Consumido', 'Expirado')", name="ck_qr_asistencia_estado"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reunion_id: Mapped[int] = mapped_column(ForeignKey("reuniones.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(db.String(128), unique=True, nullable=False)
+    expira_en: Mapped[datetime] = mapped_column(nullable=False)
+    estado: Mapped[str] = mapped_column(db.String(20), default="Activo", nullable=False)
+
+    reunion: Mapped[Reunion] = relationship()
+
+
+class ActaReunion(TimestampMixin, db.Model):
+    __tablename__ = "actas_reunion"
+    __table_args__ = (
+        CheckConstraint("estado IN ('Borrador', 'Cerrada')", name="ck_actas_reunion_estado"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reunion_id: Mapped[int] = mapped_column(ForeignKey("reuniones.id"), unique=True, nullable=False)
+    redactada_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    estado: Mapped[str] = mapped_column(db.String(20), default="Borrador", nullable=False)
+    resumen: Mapped[str | None] = mapped_column(db.Text)
+
+    reunion: Mapped[Reunion] = relationship()
+    redactada_por: Mapped[Usuario | None] = relationship(foreign_keys=[redactada_por_usuario_id])
+
+
+class ActaOrdenDia(TimestampMixin, db.Model):
+    __tablename__ = "acta_orden_dia"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    acta_reunion_id: Mapped[int] = mapped_column(ForeignKey("actas_reunion.id"), nullable=False)
+    orden: Mapped[int] = mapped_column(nullable=False)
+    descripcion: Mapped[str] = mapped_column(db.Text, nullable=False)
+
+    acta: Mapped[ActaReunion] = relationship()
+
+
+class ActaAcuerdos(TimestampMixin, db.Model):
+    __tablename__ = "acta_acuerdos"
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('Pendiente', 'En progreso', 'Cumplido', 'Descartado')",
+            name="ck_acta_acuerdos_estado",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    acta_reunion_id: Mapped[int] = mapped_column(ForeignKey("actas_reunion.id"), nullable=False)
+    descripcion: Mapped[str] = mapped_column(db.Text, nullable=False)
+    responsable_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_compromiso: Mapped[date | None]
+    estado: Mapped[str] = mapped_column(db.String(20), default="Pendiente", nullable=False)
+
+    acta: Mapped[ActaReunion] = relationship()
+    responsable: Mapped[Usuario | None] = relationship(foreign_keys=[responsable_usuario_id])
+
+
+class ActaAsistentesSnapshot(TimestampMixin, db.Model):
+    __tablename__ = "acta_asistentes_snapshot"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    acta_reunion_id: Mapped[int] = mapped_column(ForeignKey("actas_reunion.id"), nullable=False)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    nombre: Mapped[str] = mapped_column(db.String(120), nullable=False)
+    correo: Mapped[str | None] = mapped_column(db.String(255))
+    estado_respuesta: Mapped[str | None] = mapped_column(db.String(20))
+    estado_asistencia: Mapped[str | None] = mapped_column(db.String(20))
+
+    acta: Mapped[ActaReunion] = relationship()
+    usuario: Mapped[Usuario | None] = relationship(foreign_keys=[usuario_id])

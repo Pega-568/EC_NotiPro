@@ -25,6 +25,8 @@ def create_app(config_object=None) -> Flask:
     else:
         app.config.from_object(Config)
 
+    Config.validate_runtime_or_raise(app.config.get("debug_mode", "false"))
+
     db.init_app(app)
     migrate.init_app(app, db)
 

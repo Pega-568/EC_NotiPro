@@ -112,7 +112,7 @@ def test_admin_puede_crear_zona(client, app):
 
 
 def test_admin_puede_crear_reunion_multiarea(client, app):
-    csrf = web_login(client)
+    csrf = web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     response = client.post(
         "/web/admin/reuniones/nueva",
         data={
@@ -135,8 +135,8 @@ def test_admin_puede_crear_reunion_multiarea(client, app):
         assert Reunion.query.filter_by(titulo="Reunion Web").first() is not None
 
 
-def test_reunion_con_conflicto_se_rechaza(client):
-    csrf = web_login(client)
+def test_reunion_con_conflicto_se_rechaza(client, app):
+    csrf = web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     client.post(
         "/web/admin/reuniones/nueva",
         data={
@@ -173,7 +173,7 @@ def test_reunion_con_conflicto_se_rechaza(client):
 
 
 def test_admin_puede_cancelar_reunion(client, app):
-    csrf = web_login(client)
+    csrf = web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     client.post(
         "/web/admin/reuniones/nueva",
         data={
@@ -215,14 +215,14 @@ def test_vista_logs_no_muestra_password_hash_y_prioriza_descripcion(client):
 
 
 def test_admin_puede_ver_calendario_operativo(client):
-    web_login(client)
+    web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     response = client.get("/web/admin/calendario?view=month")
     assert response.status_code == 200
     assert "Calendario operativo" in response.get_data(as_text=True)
 
 
 def test_admin_puede_ver_calendario_por_zona(client):
-    web_login(client)
+    web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     response = client.get("/web/admin/calendario?view=zone")
     assert response.status_code == 200
     assert "Vista agrupada" in response.get_data(as_text=True)
@@ -267,7 +267,7 @@ def test_password_hash_no_aparece_en_html_ni_json(client):
 
 
 def test_crear_reunion_con_participantes_seleccionados_funciona(client, app):
-    csrf = web_login(client)
+    csrf = web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     response = client.post(
         "/web/admin/reuniones/nueva",
         data={
@@ -290,7 +290,7 @@ def test_crear_reunion_con_participantes_seleccionados_funciona(client, app):
 
 
 def test_formulario_reunion_muestra_responsable_obligatorio(client):
-    web_login(client)
+    web_login(client, correo="secretaria.general@empresa.local", password="Agenda123!")
     response = client.get("/web/admin/reuniones/nueva")
     body = response.get_data(as_text=True)
     assert response.status_code == 200

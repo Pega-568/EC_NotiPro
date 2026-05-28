@@ -2,6 +2,7 @@ import os
 
 
 class Config:
+    APP_ENV = os.getenv("APP_ENV", "development")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///agenda.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -21,8 +22,7 @@ class Config:
     SESSION_TTL_MINUTES = int(os.getenv("SESSION_TTL_MINUTES", "480"))
     LOGIN_LOCK_MINUTES = int(os.getenv("LOGIN_LOCK_MINUTES", "15"))
     FCM_ENABLED = os.getenv("FCM_ENABLED", "false").lower() == "true"
-    FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", "").strip()
-    FCM_ENDPOINT = os.getenv("FCM_ENDPOINT", "https://fcm.googleapis.com/fcm/send").strip()
+    FCM_SERVICE_ACCOUNT_PATH = os.getenv("FCM_SERVICE_ACCOUNT_PATH", "").strip()
     MAIL_ENABLED = os.getenv("MAIL_ENABLED", "false").lower() == "true"
     MAIL_HOST = os.getenv("MAIL_HOST", "").strip()
     MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
@@ -38,6 +38,20 @@ class Config:
     BACKGROUND_DISPATCH_INTERVAL_SECONDS = int(
         os.getenv("BACKGROUND_DISPATCH_INTERVAL_SECONDS", "30")
     )
+
+    @classmethod
+    def validate_runtime_or_raise(cls, debug_mode: str) -> None:
+        if cls.APP_ENV in ("production", "staging"):
+            if cls.SECRET_KEY == "change-me":
+                raise RuntimeError("Insecure SECRET_KEY for production.")
+            if "sqlite" in cls.SQLALCHEMY_DATABASE_URI:
+                raise RuntimeError("SQLite cannot be used in production.")
+            if not cls.SESSION_COOKIE_SECURE:
+                raise RuntimeError("SESSION_COOKIE_SECURE must be True in production.")
+            if "127.0.0.1" in cls.INTERNAL_BASE_URL or "localhost" in cls.INTERNAL_BASE_URL:
+                raise RuntimeError("INTERNAL_BASE_URL must not be local in production.")
+            if debug_mode.lower() == "true":
+                raise RuntimeError("Debug mode must be disabled in production.")
 
 
 class TestConfig(Config):

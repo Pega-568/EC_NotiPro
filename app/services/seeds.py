@@ -1,5 +1,5 @@
 from app.extensions import db
-from app.constants import ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA
+from app.constants import ROLE_ADMIN, ROLE_AGENDADOR, ROLE_COLABORADOR, ROLE_SECRETARIA
 from app.models import Area, Configuracion, Role, Usuario, ZonaReunion
 from app.security import hash_password
 
@@ -27,7 +27,7 @@ def seed_defaults() -> None:
         legacy = Role.query.filter_by(nombre=legacy_name).first()
         if legacy:
             legacy.nombre = role_name
-    for role_name in (ROLE_ADMIN, ROLE_SECRETARIA, ROLE_COLABORADOR):
+    for role_name in (ROLE_ADMIN, ROLE_AGENDADOR, ROLE_SECRETARIA, ROLE_COLABORADOR):
         if not Role.query.filter_by(nombre=role_name).first():
             db.session.add(Role(nombre=role_name))
     db.session.flush()
@@ -49,6 +49,7 @@ def seed_defaults() -> None:
 
     admin_role = Role.query.filter_by(nombre=ROLE_ADMIN).first()
     scheduler_role = Role.query.filter_by(nombre=ROLE_SECRETARIA).first()
+    agendador_role = Role.query.filter_by(nombre=ROLE_AGENDADOR).first()
     user_role = Role.query.filter_by(nombre=ROLE_COLABORADOR).first()
 
     users = [
@@ -58,6 +59,13 @@ def seed_defaults() -> None:
             "secretaria.general@empresa.local",
             "Agenda123!",
             scheduler_role.id,
+            areas["Contabilidad"].id,
+        ),
+        (
+            "Agendador Contabilidad",
+            "agendador.contabilidad@empresa.local",
+            "Agenda123!",
+            agendador_role.id,
             areas["Contabilidad"].id,
         ),
         (

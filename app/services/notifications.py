@@ -61,7 +61,7 @@ def register_device_token(
 
 
 def queue_meeting_notifications(meeting: Reunion, event_type: str, extra: dict | None = None) -> list[NotificationEvent]:
-    recipients = _meeting_recipient_users(meeting)
+    recipients = get_event_recipients(meeting, event_type)
     payload = _meeting_payload(meeting, recipients, extra)
     events: list[NotificationEvent] = []
 
@@ -92,7 +92,7 @@ def queue_meeting_notifications(meeting: Reunion, event_type: str, extra: dict |
 
 
 def queue_meeting_emails(meeting: Reunion, event_type: str, extra: dict | None = None) -> list[EmailEvent]:
-    recipients = _meeting_recipient_users(meeting)
+    recipients = get_event_recipients(meeting, event_type)
     programado_para = None
     if event_type == "reminder_30":
         programado_para = datetime.combine(meeting.fecha, meeting.hora_inicio) - timedelta(minutes=30)
@@ -242,8 +242,12 @@ def _dispatch_event(event: NotificationEvent) -> None:
         )
         return
 
-    recipient_ids = payload.get("recipient_ids") or []
-    users = Usuario.query.filter(Usuario.id.in_(recipient_ids)).all() if recipient_ids else []
+    if event.reunion:
+        users = get_event_recipients(event.reunion, event.tipo_evento)
+    else:
+        recipient_ids = payload.get("recipient_ids") or []
+        users = Usuario.query.filter(Usuario.id.in_(recipient_ids)).all() if recipient_ids else []
+        
     sent_any = False
 
     for user in users:
@@ -330,8 +334,23 @@ def _config_enabled(key: str, default: bool) -> bool:
     return item.valor.lower() == "true"
 
 
-def _meeting_recipient_users(meeting: Reunion) -> list[Usuario]:
-    by_id: dict[int, Usuario] = {meeting.responsable.id: meeting.responsable}
+def get_event_recipients(meeting: Reunion, event_type: str) -> list[Usuario]:
+    by_id: dict[int, Usuario] = {}
+    
+    if event_type == "meeting_response":
+        by_id[meeting.creador.id] = meeting.creador
+        by_id[meeting.responsable.id] = meeting.responsable
+        return list(by_id.values())
+        
+    if event_type in ("reminder_30", "reminder_10"):
+        by_id[meeting.responsable.id] = meeting.responsable
+        by_id[meeting.creador.id] = meeting.creador
+        for participant in meeting.participantes:
+            if participant.estado_respuesta != "Rechazada":
+                by_id[participant.usuario.id] = participant.usuario
+        return list(by_id.values())
+        
+    by_id[meeting.responsable.id] = meeting.responsable
     by_id[meeting.creador.id] = meeting.creador
     for participant in meeting.participantes:
         by_id[participant.usuario.id] = participant.usuario
@@ -359,50 +378,12 @@ def _meeting_payload(meeting: Reunion, recipients: list[Usuario], extra: dict | 
 
 
 def _send_push(device_token: str, event_type: str, payload: dict) -> dict:
-    if not current_app.config.get("FCM_ENABLED") or not current_app.config.get("FCM_SERVER_KEY"):
+    if not current_app.config.get("FCM_ENABLED") or not current_app.config.get("FCM_SERVICE_ACCOUNT_PATH"):
         return {"result": "fallido", "detail": "proveedor_push_no_configurado"}
-
-    title, body, channel_id = _build_push_message(event_type, payload)
-    data = {
-        "to": device_token,
-        "priority": "high",
-        "notification": {
-            "title": title,
-            "body": body,
-        },
-        "data": {
-            "meeting_id": str(payload.get("meeting_id", "")),
-            "event_type": event_type,
-            "screen": "meeting_detail",
-            "title": payload.get("title", ""),
-            "body": body,
-            "channel_id": channel_id,
-        },
-    }
-    req = request.Request(
-        current_app.config["FCM_ENDPOINT"],
-        data=json.dumps(data).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"key={current_app.config['FCM_SERVER_KEY']}",
-        },
-        method="POST",
-    )
-    try:
-        with request.urlopen(req, timeout=10) as response:
-            raw = response.read().decode("utf-8")
-            parsed = json.loads(raw or "{}")
-            if parsed.get("failure"):
-                result_items = parsed.get("results") or [{}]
-                error_code = result_items[0].get("error")
-                if error_code in {"NotRegistered", "InvalidRegistration"}:
-                    return {"result": "token_invalido", "detail": error_code}
-                return {"result": "fallido", "detail": error_code or "fcm_failure"}
-            return {"result": "enviado", "detail": "ok"}
-    except error.HTTPError as exc:
-        return {"result": "fallido", "detail": f"http_{exc.code}"}
-    except error.URLError:
-        return {"result": "fallido", "detail": "network_error"}
+        
+    # TODO: Implementar FCM HTTP v1 (Firebase Admin SDK)
+    # Reemplaza la logica Legacy que utilizaba Server Key.
+    return {"result": "fallido", "detail": "fcm_http_v1_not_implemented"}
 
 
 def _build_push_message(event_type: str, payload: dict) -> tuple[str, str, str]:

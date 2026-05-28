@@ -46,7 +46,7 @@ def test_mobile_token_invalido_vuelve_401(client):
 
 
 def test_mobile_reuniones_lista_solo_propias(client):
-    admin_headers = api_login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
     client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers)
     client.post("/api/reuniones", json=_meeting_payload([4], start="10:30", end="11:30"), headers=admin_headers)
     headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
@@ -58,7 +58,7 @@ def test_mobile_reuniones_lista_solo_propias(client):
 
 
 def test_mobile_detalle_aceptar_y_rechazar(client):
-    admin_headers = api_login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
 
@@ -85,7 +85,7 @@ def test_mobile_detalle_aceptar_y_rechazar(client):
 
 
 def test_mobile_rechazo_sin_razon_falla(client):
-    admin_headers = api_login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
     created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
     headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
     response = client.post(f"/api/mobile/reuniones/{created['id']}/rechazar", headers=headers, json={"razon": ""})
@@ -117,7 +117,7 @@ def test_mobile_registra_device_token(client, app):
 
 
 def test_dispatch_notificaciones_sin_dispositivo_genera_logs(client, app):
-    admin_headers = api_login(client, "admin@empresa.local", "Admin123!")
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
     client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers)
     with app.app_context():
         from app.models import NotificationEvent, NotificationLog
