@@ -3,69 +3,224 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title or "Agenda de Reuniones" }}</title>
+  <title>{{ title or "EC_NotiPro | Ecuamatriz" }}</title>
   <style>
     :root {
-      --bg: #f4efe7;
-      --panel: #fffaf4;
-      --ink: #1f2933;
-      --accent: #8a3b12;
-      --accent-soft: #eed8c8;
-      --line: #d7c8b8;
+      --bg: #eef3f8;
+      --bg-strong: #dce7f4;
+      --panel: #ffffff;
+      --ink: #1d2b39;
+      --muted: #5f7287;
+      --brand: #003b8e;
+      --brand-soft: #d8e7ff;
+      --brand-2: #00a0df;
+      --line: #c7d4e3;
+      --success: #0b6b3a;
+      --success-soft: #d9f3e5;
+      --danger: #8f1d1d;
+      --danger-soft: #f8dddd;
+      --warning: #9d5f00;
+      --warning-soft: #fff0cc;
+      --shadow: 0 20px 40px rgba(0, 42, 92, 0.08);
+      --radius: 18px;
     }
-    body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: linear-gradient(140deg, #f4efe7, #e8ddd0); color: var(--ink); }
-    header, main { max-width: 1120px; margin: 0 auto; padding: 1rem; }
-    nav a { margin-right: 1rem; color: var(--accent); text-decoration: none; font-weight: 700; }
-    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(0,160,223,0.10), transparent 24%),
+        linear-gradient(180deg, var(--bg-strong), var(--bg));
+      color: var(--ink);
+    }
+    a { color: var(--brand); text-decoration: none; }
+    header {
+      background: linear-gradient(135deg, #00285f, #0047ab 62%, #00a0df);
+      color: #fff;
+      padding: 1.1rem 0 1.4rem;
+      box-shadow: var(--shadow);
+    }
+    .shell { max-width: 1240px; margin: 0 auto; padding: 0 1.2rem; }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .brand { display: flex; align-items: center; gap: 1rem; }
+    .brand-mark {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.18);
+      display: grid;
+      place-items: center;
+      font-size: 1.8rem;
+      font-weight: 800;
+      border: 1px solid rgba(255,255,255,0.24);
+    }
+    .brand h1 { margin: 0; font-size: 1.7rem; }
+    .brand p { margin: 0.2rem 0 0; color: rgba(255,255,255,0.82); }
+    .user-chip {
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      font-size: 0.95rem;
+    }
+    nav {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+    nav a {
+      color: #fff;
+      padding: 0.65rem 0.95rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      font-weight: 600;
+    }
+    nav a:hover { background: rgba(255,255,255,0.18); }
+    main { padding: 1.3rem 0 2rem; }
+    .layout {
+      display: grid;
+      gap: 1rem;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      box-shadow: var(--shadow);
+    }
+    .panel-muted { background: #f7fbff; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.85rem; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.65rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-    input, select, textarea, button { width: 100%; padding: 0.7rem; border-radius: 10px; border: 1px solid var(--line); box-sizing: border-box; }
-    button, .button-link { background: var(--accent); color: white; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
-    .badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
-    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
-    .error { color: #8f1d1d; font-weight: 700; }
-    .success { color: #0d6832; font-weight: 700; }
-    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    th, td { text-align: left; padding: 0.75rem 0.65rem; border-bottom: 1px solid #e4edf7; vertical-align: top; }
+    th { color: var(--muted); font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    input, select, textarea, button {
+      width: 100%;
+      padding: 0.75rem 0.8rem;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      font: inherit;
+      background: #fff;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    button, .button-link {
+      background: linear-gradient(135deg, var(--brand), #0058c7);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      border: none;
+    }
+    .button-link.secondary, button.secondary {
+      background: #eff5fb;
+      color: var(--brand);
+      border: 1px solid var(--line);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-weight: 700;
+    }
+    .badge.success { background: var(--success-soft); color: var(--success); }
+    .badge.warning { background: var(--warning-soft); color: var(--warning); }
+    .badge.danger { background: var(--danger-soft); color: var(--danger); }
+    .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
     .inline-form { display: inline-block; margin: 0; }
+    .error, .success {
+      border-radius: 14px;
+      padding: 0.85rem 1rem;
+      font-weight: 700;
+      margin: 0 0 1rem;
+    }
+    .error { color: var(--danger); background: var(--danger-soft); }
+    .success { color: var(--success); background: var(--success-soft); }
+    .metric {
+      padding: 1rem;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #f8fbff, #eef5fc);
+      border: 1px solid var(--line);
+    }
+    .metric strong { display: block; font-size: 1.6rem; color: var(--brand); }
+    .muted { color: var(--muted); }
     pre { white-space: pre-wrap; word-break: break-word; }
+    .logout-form { max-width: 220px; margin-top: 0.85rem; }
+    @media (max-width: 720px) {
+      header { padding-bottom: 1rem; }
+      .header-top { align-items: flex-start; }
+      nav { overflow-x: auto; padding-bottom: 0.2rem; }
+      .panel { padding: 0.95rem; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>Agenda de Reuniones</h1>
-    {% if g.current_user %}
-    <nav>
-      <a href="/">Inicio</a>
-      {% if g.current_user.role.nombre == "Admin" %}
-      <a href="/web/admin">Dashboard</a>
-      <a href="/web/admin/calendario">Calendario</a>
-      <a href="/web/admin/usuarios">Usuarios</a>
-      <a href="/web/admin/areas">Areas</a>
-      <a href="/web/admin/zonas">Zonas de reunion</a>
-      <a href="/web/admin/reuniones">Reuniones</a>
-      <a href="/web/admin/logs">Logs</a>
-      <a href="/web/admin/configuracion">Configuracion</a>
-      {% elif g.current_user.role.nombre == "Agendador" %}
-      <a href="/scheduler">Dashboard</a>
-      <a href="/scheduler/usuarios">Mi area</a>
-      <a href="/scheduler/reuniones">Mis reuniones</a>
-      <a href="/scheduler/respuestas">Respuestas</a>
-      <a href="/scheduler/zonas">Zonas</a>
-      {% else %}
-      <a href="/mis-reuniones">Mis reuniones</a>
+    <div class="shell">
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-mark">E</div>
+          <div>
+            <h1>EC_NotiPro</h1>
+            <p>Agenda interna y notificaciones institucionales de Ecuamatriz</p>
+          </div>
+        </div>
+        {% if g.current_user %}
+        <div class="user-chip">
+          {{ g.current_user.nombre }} · {{ g.current_user.role.nombre }}
+        </div>
+        {% endif %}
+      </div>
+      {% if g.current_user %}
+      <nav>
+        <a href="/">Inicio</a>
+        {% if g.current_user.role.nombre == "Administrador del sistema" %}
+        <a href="/web/admin">Panel</a>
+        <a href="/web/admin/calendario">Calendario</a>
+        <a href="/web/admin/reuniones">Reuniones</a>
+        <a href="/web/admin/usuarios">Usuarios</a>
+        <a href="/web/admin/areas">Areas</a>
+        <a href="/web/admin/zonas">Zonas</a>
+        <a href="/web/admin/logs">Logs</a>
+        <a href="/web/admin/configuracion">Configuracion</a>
+        {% elif g.current_user.role.nombre == "Secretaria" %}
+        <a href="/scheduler">Operacion</a>
+        <a href="/web/admin/calendario">Calendario</a>
+        <a href="/web/admin/reuniones">Reuniones</a>
+        <a href="/scheduler/usuarios">Participantes</a>
+        <a href="/scheduler/zonas">Zonas</a>
+        {% else %}
+        <a href="/mis-reuniones">Mis reuniones</a>
+        {% endif %}
+      </nav>
+      <form class="logout-form" method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+        <button type="submit" class="secondary">Cerrar sesion</button>
+      </form>
       {% endif %}
-    </nav>
-    <form method="post" action="/logout" style="max-width: 180px; margin-top: 0.8rem;">
-      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
-      <button type="submit">Cerrar sesion</button>
-    </form>
-    {% endif %}
+    </div>
   </header>
   <main>
-    {% if success %}<p class="success">{{ success }}</p>{% endif %}
-    {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    {% block content %}{% endblock %}
+    <div class="shell layout">
+      {% if success %}<p class="success">{{ success }}</p>{% endif %}
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
   </main>
 </body>
 </html>

@@ -1,89 +1,117 @@
-# API del sistema
+# API EC_NotiPro
 
-## Auth
+## Roles
+
+- `Administrador del sistema`: administra catalogos, usuarios, configuracion, logs y tambien puede operar reuniones.
+- `Secretaria`: opera reuniones, calendario y participantes, pero no administra seguridad ni catalogos maestros.
+- `Colaborador`: consulta y responde sus reuniones.
+
+## Auth web/API
 
 - `POST /api/auth/login`
-  - Roles: publico
-  - Datos: `correo`, `password`
-  - Valida: credenciales, usuario activo, limite de intentos
-  - Errores: `401`, `422`
-  - Logs: `login`, `login_fallido`
+  - Publico.
+  - Devuelve `csrf_token` y perfil seguro.
 - `POST /api/auth/logout`
-  - Roles: autenticado
-  - Datos: cookie de sesion + CSRF
-  - Logs: `logout`
+  - Requiere sesion.
 - `GET /api/auth/me`
-  - Roles: autenticado
-  - Devuelve perfil seguro
+  - Requiere sesion.
+
+## Auth movil
+
+- `POST /api/mobile/auth/login`
+  - Publico.
+  - Devuelve `access_token`, `csrf_token` y perfil seguro.
+- `POST /api/mobile/auth/logout`
+  - Requiere Bearer token.
+- `GET /api/mobile/auth/me`
+  - Requiere Bearer token.
 
 ## Usuarios
 
 - `GET /api/usuarios`
-  - Roles: `Admin`, `Agendador`
-  - Area: Admin ve todo; Agendador solo su area
-  - Logs: ninguno
+  - Roles: `Administrador del sistema`, `Secretaria`.
+- `GET /api/usuarios/buscar`
+  - Roles: `Administrador del sistema`, `Secretaria`.
+  - Filtros: `q`, `area_id`.
 - `POST /api/usuarios`
-  - Roles: `Admin`
-  - Datos: `nombre`, `correo`, `password`, `role_id`, `area_id`
-  - Logs: `creacion_usuario`
+  - Roles: `Administrador del sistema`.
 - `PATCH /api/usuarios/{id}`
-  - Roles: `Admin`
-  - Logs: `edicion_usuario`
+  - Roles: `Administrador del sistema`.
 - `PATCH /api/usuarios/{id}/desactivar`
-  - Roles: `Admin`
-  - Logs: `desactivacion_usuario`
+  - Roles: `Administrador del sistema`.
 
 ## Areas
 
 - `GET /api/areas`
-  - Roles: autenticado
+  - Roles: autenticado.
 - `POST /api/areas`
-  - Roles: `Admin`
-  - Logs: `creacion_area`
+  - Roles: `Administrador del sistema`.
 - `PATCH /api/areas/{id}`
-  - Roles: `Admin`
-  - Logs: `edicion_area`
+  - Roles: `Administrador del sistema`.
 
 ## Zonas
 
 - `GET /api/zonas`
-  - Roles: autenticado
+  - Roles: autenticado.
 - `POST /api/zonas`
-  - Roles: `Admin`
-  - Logs: `creacion_zona`
+  - Roles: `Administrador del sistema`.
 - `PATCH /api/zonas/{id}`
-  - Roles: `Admin`
-  - Logs: `edicion_zona`
+  - Roles: `Administrador del sistema`.
 
 ## Reuniones
 
 - `GET /api/reuniones`
-  - Roles: autenticado
-  - Objeto: Admin todo; Agendador solo creadas por el o donde participa; Usuario natural solo propias
+  - Roles: autenticado.
+  - `Administrador del sistema` y `Secretaria` ven el tablero completo.
+  - `Colaborador` ve solo reuniones en las que participa.
 - `GET /api/reuniones/{id}`
-  - Roles: autenticado
-  - Objeto: acceso por participacion o privilegio Admin
+  - Requiere acceso por rol operativo o participacion.
+- `GET /api/reuniones/{id}/historial`
+  - Devuelve cambios historicos persistidos para reportes y auditoria.
 - `POST /api/reuniones`
-  - Roles: `Admin`, `Agendador`
-  - Valida: area, participantes, conflictos de agenda, zona activa, horario laboral, multi area
-  - Logs: `creacion_reunion`
+  - Roles: `Administrador del sistema`, `Secretaria`.
+  - Campos obligatorios:
+    - `titulo`
+    - `motivo`
+    - `zona_id`
+    - `fecha`
+    - `hora_inicio`
+    - `hora_fin`
+    - `participant_ids`
+    - `responsable_reunion_id`
 - `PATCH /api/reuniones/{id}`
-  - Roles: `Admin`
-  - Logs: `modificacion_reunion`
+  - Roles: `Administrador del sistema`, `Secretaria`.
 - `POST /api/reuniones/{id}/cancelar`
-  - Roles: `Admin`
-  - Logs: `cancelacion_reunion`
+  - Roles: `Administrador del sistema`, `Secretaria`.
 - `POST /api/reuniones/{id}/aceptar`
-  - Roles: participante autenticado
-  - Logs: `aceptacion_reunion`
+  - Roles: participante autenticado.
 - `POST /api/reuniones/{id}/rechazar`
-  - Roles: participante autenticado
-  - Datos: `razon`
-  - Logs: `rechazo_reunion`
+  - Roles: participante autenticado.
+  - Requiere `razon`.
 
-## Logs
+## Móvil
+
+- `GET /api/mobile/reuniones`
+  - Devuelve reuniones visibles para el usuario autenticado.
+- `GET /api/mobile/reuniones/{id}`
+  - Incluye `responsable`.
+- `POST /api/mobile/reuniones/{id}/aceptar`
+- `POST /api/mobile/reuniones/{id}/rechazar`
+- `POST /api/mobile/device-token`
+  - Registra FCM token para push real.
+
+## Operacion interna
 
 - `GET /api/logs`
-  - Roles: `Admin`
-  - Devuelve auditoria segura, sin secretos
+  - Roles: `Administrador del sistema`.
+- `GET /api/configuracion`
+  - Roles: `Administrador del sistema`.
+- `PATCH /api/configuracion`
+  - Roles: `Administrador del sistema`.
 
+## Comportamiento de notificaciones y correo
+
+- Crear, editar, cancelar o responder una reunion genera eventos de push y correo.
+- Los eventos inmediatos se despachan justo despues del commit.
+- Los recordatorios a 30 y 10 minutos quedan persistidos para despacho automatico.
+- El historial de reuniones se guarda en `reunion_historial`.

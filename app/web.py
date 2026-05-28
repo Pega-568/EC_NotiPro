@@ -7,6 +7,7 @@ from flask import Blueprint, current_app, g, make_response, redirect, render_tem
 
 from app.audit import log_event
 from app.auth import clear_session_cookies, require_auth, require_roles, set_session_cookies
+from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA
 from app.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.extensions import db
 from app.models import Area, Configuracion, LogSistema, Reunion, Role, Usuario, ZonaReunion
@@ -110,6 +111,13 @@ def _meeting_form_payload(existing: Reunion | None = None) -> dict:
             request.args.get("hora_fin", existing.hora_fin.strftime("%H:%M") if existing and existing.hora_fin else "10:00"),
         ),
         "zona_id": request.form.get("zona_id", request.args.get("zona_id", str(getattr(existing, "zona_id", "") or ""))),
+        "responsable_reunion_id": request.form.get(
+            "responsable_reunion_id",
+            request.args.get(
+                "responsable_reunion_id",
+                str(getattr(existing, "responsable_reunion_id", "") or ""),
+            ),
+        ),
         "prioridad": request.form.get("prioridad", getattr(existing, "prioridad", "Media")),
         "participant_ids": participant_ids,
     }
@@ -138,6 +146,10 @@ def _selected_participant_cards(participant_ids: list[str]) -> list[dict]:
                 }
             )
     return cards
+
+
+def _responsable_candidates():
+    return Usuario.query.filter_by(estado="Activo").order_by(Usuario.nombre).all()
 
 
 def _bool_config(key: str, default: bool = False) -> bool:
@@ -182,9 +194,9 @@ def favicon():
 @web_bp.get("/")
 def home():
     if g.current_user:
-        if g.current_user.role.nombre == "Admin":
+        if g.current_user.role.nombre == ROLE_ADMIN:
             return redirect(url_for("web.admin_dashboard"))
-        if g.current_user.role.nombre == "Agendador":
+        if g.current_user.role.nombre == ROLE_SECRETARIA:
             return redirect(url_for("web.scheduler_dashboard"))
         return redirect(url_for("web.user_dashboard"))
     return redirect(url_for("web.login"))
@@ -249,7 +261,7 @@ def admin_redirect():
 
 
 @web_bp.get("/web/admin")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_dashboard():
     success, error = _request_messages()
     today = date.today()
@@ -290,7 +302,7 @@ def admin_dashboard():
 
 
 @web_bp.get("/web/admin/calendario")
-@require_roles("Admin", api=False)
+@require_roles(*OPERATOR_ROLES, api=False)
 def admin_calendar():
     success, error = _request_messages()
     view_mode = request.args.get("view", "month")
@@ -345,7 +357,7 @@ def admin_calendar():
 
 
 @web_bp.get("/web/admin/usuarios")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_users():
     success, error = _request_messages()
     users = Usuario.query.order_by(Usuario.id).all()
@@ -353,7 +365,7 @@ def admin_users():
 
 
 @web_bp.route("/web/admin/usuarios/nuevo", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_users_new():
     success, error = _request_messages()
     form_data = _user_form_payload()
@@ -392,7 +404,7 @@ def admin_users_new():
 
 
 @web_bp.route("/web/admin/usuarios/<int:user_id>/editar", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_users_edit(user_id: int):
     user = Usuario.query.get(user_id)
     if not user:
@@ -435,7 +447,7 @@ def admin_users_edit(user_id: int):
 
 
 @web_bp.post("/web/admin/usuarios/<int:user_id>/desactivar")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_users_disable(user_id: int):
     user = Usuario.query.get(user_id)
     if not user:
@@ -453,7 +465,7 @@ def admin_users_disable(user_id: int):
 
 
 @web_bp.post("/web/admin/usuarios/<int:user_id>/activar")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_users_enable(user_id: int):
     user = Usuario.query.get(user_id)
     if not user:
@@ -471,7 +483,7 @@ def admin_users_enable(user_id: int):
 
 
 @web_bp.get("/web/admin/areas")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_areas():
     success, error = _request_messages()
     areas = Area.query.order_by(Area.nombre).all()
@@ -479,7 +491,7 @@ def admin_areas():
 
 
 @web_bp.route("/web/admin/areas/nueva", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_areas_new():
     success, error = _request_messages()
     form_data = _area_form_payload()
@@ -508,7 +520,7 @@ def admin_areas_new():
 
 
 @web_bp.route("/web/admin/areas/<int:area_id>/editar", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_areas_edit(area_id: int):
     area = Area.query.get(area_id)
     if not area:
@@ -542,7 +554,7 @@ def admin_areas_edit(area_id: int):
 
 
 @web_bp.post("/web/admin/areas/<int:area_id>/desactivar")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_areas_disable(area_id: int):
     area = Area.query.get(area_id)
     if not area:
@@ -560,7 +572,7 @@ def admin_areas_disable(area_id: int):
 
 
 @web_bp.post("/web/admin/areas/<int:area_id>/activar")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_areas_enable(area_id: int):
     area = Area.query.get(area_id)
     if not area:
@@ -578,7 +590,7 @@ def admin_areas_enable(area_id: int):
 
 
 @web_bp.get("/web/admin/zonas")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_zones():
     success, error = _request_messages()
     zones = ZonaReunion.query.order_by(ZonaReunion.nombre).all()
@@ -586,7 +598,7 @@ def admin_zones():
 
 
 @web_bp.route("/web/admin/zonas/nueva", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_zones_new():
     success, error = _request_messages()
     form_data = _zone_form_payload()
@@ -626,7 +638,7 @@ def admin_zones_new():
 
 
 @web_bp.route("/web/admin/zonas/<int:zone_id>/editar", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_zones_edit(zone_id: int):
     zone = ZonaReunion.query.get(zone_id)
     if not zone:
@@ -671,7 +683,7 @@ def admin_zones_edit(zone_id: int):
 
 
 @web_bp.post("/web/admin/zonas/<int:zone_id>/desactivar")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_zones_disable(zone_id: int):
     zone = ZonaReunion.query.get(zone_id)
     if not zone:
@@ -689,7 +701,7 @@ def admin_zones_disable(zone_id: int):
 
 
 @web_bp.post("/web/admin/zonas/<int:zone_id>/activar")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_zones_enable(zone_id: int):
     zone = ZonaReunion.query.get(zone_id)
     if not zone:
@@ -707,7 +719,7 @@ def admin_zones_enable(zone_id: int):
 
 
 @web_bp.get("/web/admin/reuniones")
-@require_roles("Admin", api=False)
+@require_roles(*OPERATOR_ROLES, api=False)
 def admin_meetings():
     success, error = _request_messages()
     meetings = Reunion.query.order_by(Reunion.fecha.desc(), Reunion.hora_inicio.desc()).all()
@@ -715,7 +727,7 @@ def admin_meetings():
 
 
 @web_bp.route("/web/admin/reuniones/nueva", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(*OPERATOR_ROLES, api=False)
 def admin_meetings_new():
     success, error = _request_messages()
     form_data = _meeting_form_payload()
@@ -735,6 +747,7 @@ def admin_meetings_new():
         error=error,
         is_new=True,
         participants=active_users,
+        responsible_candidates=active_users,
         zones=active_zones,
         selected_participants=selected_participants,
         searchable_areas=Area.query.filter_by(estado="Activa").order_by(Area.nombre).all(),
@@ -743,7 +756,7 @@ def admin_meetings_new():
 
 
 @web_bp.get("/web/admin/reuniones/<int:meeting_id>")
-@require_roles("Admin", api=False)
+@require_roles(*OPERATOR_ROLES, api=False)
 def admin_meeting_detail(meeting_id: int):
     success, error = _request_messages()
     meeting = Reunion.query.get(meeting_id)
@@ -762,7 +775,7 @@ def admin_meeting_detail(meeting_id: int):
 
 
 @web_bp.route("/web/admin/reuniones/<int:meeting_id>/editar", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(*OPERATOR_ROLES, api=False)
 def admin_meetings_edit(meeting_id: int):
     meeting = Reunion.query.get(meeting_id)
     if not meeting:
@@ -787,6 +800,7 @@ def admin_meetings_edit(meeting_id: int):
         is_new=False,
         meeting=meeting,
         participants=active_users,
+        responsible_candidates=active_users,
         zones=active_zones,
         selected_participants=selected_participants,
         searchable_areas=Area.query.filter_by(estado="Activa").order_by(Area.nombre).all(),
@@ -795,7 +809,7 @@ def admin_meetings_edit(meeting_id: int):
 
 
 @web_bp.post("/web/admin/reuniones/<int:meeting_id>/cancelar")
-@require_roles("Admin", api=False)
+@require_roles(*OPERATOR_ROLES, api=False)
 def admin_meetings_cancel(meeting_id: int):
     meeting = Reunion.query.get(meeting_id)
     if not meeting:
@@ -805,7 +819,7 @@ def admin_meetings_cancel(meeting_id: int):
 
 
 @web_bp.get("/web/admin/logs")
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_logs():
     success, error = _request_messages()
     logs = LogSistema.query.order_by(LogSistema.fecha_hora.desc()).limit(200).all()
@@ -813,7 +827,7 @@ def admin_logs():
 
 
 @web_bp.route("/web/admin/configuracion", methods=["GET", "POST"])
-@require_roles("Admin", api=False)
+@require_roles(ROLE_ADMIN, api=False)
 def admin_config():
     success, error = _request_messages()
     items = Configuracion.query.order_by(Configuracion.clave).all()
@@ -825,6 +839,7 @@ def admin_config():
             "horario_laboral_fin",
             "max_intentos_login",
             "debug_mode",
+            "correo_formal_automatico",
             "recordatorio_30_minutos",
             "recordatorio_10_minutos",
         }
@@ -838,16 +853,12 @@ def admin_config():
 
 
 @web_bp.get("/scheduler")
-@require_roles("Admin", "Agendador", api=False)
+@require_roles(ROLE_ADMIN, ROLE_SECRETARIA, api=False)
 def scheduler_dashboard():
     actor = g.current_user
-    meetings = (
-        Reunion.query.filter((Reunion.creador_id == actor.id) | Reunion.participantes.any(usuario_id=actor.id))
-        .order_by(Reunion.fecha.desc())
-        .limit(20)
-        .all()
-    )
-    users = Usuario.query.filter_by(area_id=actor.area_id).count()
+    query = Reunion.query.order_by(Reunion.fecha.desc()).limit(20)
+    meetings = query.all() if actor.role.nombre == ROLE_SECRETARIA else query.all()
+    users = Usuario.query.count() if actor.role.nombre == ROLE_SECRETARIA else Usuario.query.filter_by(area_id=actor.area_id).count()
     zones = ZonaReunion.query.filter_by(estado="Activa").count()
     return render_template(
         "scheduler/dashboard.html",
@@ -859,28 +870,28 @@ def scheduler_dashboard():
 
 
 @web_bp.get("/scheduler/usuarios")
-@require_roles("Agendador", api=False)
+@require_roles(ROLE_SECRETARIA, api=False)
 def scheduler_users():
-    users = Usuario.query.filter_by(area_id=g.current_user.area_id).order_by(Usuario.id).all()
+    users = Usuario.query.order_by(Usuario.id).all()
     return render_template("scheduler/users.html", users=users)
 
 
 @web_bp.get("/scheduler/reuniones")
-@require_roles("Agendador", api=False)
+@require_roles(ROLE_SECRETARIA, api=False)
 def scheduler_meetings():
-    meetings = Reunion.query.filter_by(creador_id=g.current_user.id).order_by(Reunion.fecha.desc()).all()
+    meetings = Reunion.query.order_by(Reunion.fecha.desc()).all()
     return render_template("scheduler/meetings.html", meetings=meetings)
 
 
 @web_bp.get("/scheduler/respuestas")
-@require_roles("Agendador", api=False)
+@require_roles(ROLE_SECRETARIA, api=False)
 def scheduler_responses():
-    meetings = Reunion.query.filter_by(creador_id=g.current_user.id).order_by(Reunion.fecha.desc()).all()
+    meetings = Reunion.query.order_by(Reunion.fecha.desc()).all()
     return render_template("scheduler/responses.html", meetings=meetings)
 
 
 @web_bp.get("/scheduler/zonas")
-@require_roles("Agendador", api=False)
+@require_roles(ROLE_SECRETARIA, api=False)
 def scheduler_zones():
     zones = ZonaReunion.query.filter_by(estado="Activa").order_by(ZonaReunion.nombre).all()
     return render_template("scheduler/zones.html", zones=zones)

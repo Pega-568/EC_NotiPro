@@ -1,20 +1,22 @@
 from __future__ import annotations
 
+from sqlalchemy import inspect
 from flask import Flask, jsonify, request
 
-from app.api.routes import api_bp
-from app.auth import enforce_csrf, load_current_user
 from app.config import Config, TestConfig
-from app.audit import log_event
-from app.errors import AppError, ValidationError
-from app.extensions import db
-from app.schema import ensure_runtime_schema
-from app.services.notifications import dispatch_pending_notifications
-from app.services.seeds import seed_defaults
-from app.web import web_bp
+from app.extensions import db, migrate
 
 
 def create_app(config_object=None) -> Flask:
+    # Import heavier modules lazily to avoid circular import issues during test discovery
+    from app.api.routes import api_bp
+    from app.auth import enforce_csrf, load_current_user
+    from app.audit import log_event
+    from app.errors import AppError, ValidationError
+    from app.services.notifications import dispatch_due_communications, start_background_dispatcher
+    from app.services.seeds import seed_defaults
+    from app.web import web_bp
+
     app = Flask(__name__)
     if config_object == "testing":
         app.config.from_object(TestConfig)
@@ -24,6 +26,7 @@ def create_app(config_object=None) -> Flask:
         app.config.from_object(Config)
 
     db.init_app(app)
+    migrate.init_app(app, db)
 
     @app.before_request
     def before_request():
@@ -79,22 +82,28 @@ def create_app(config_object=None) -> Flask:
     app.register_blueprint(web_bp)
 
     with app.app_context():
-        db.create_all()
-        ensure_runtime_schema()
+        if app.config.get("TESTING"):
+            db.create_all()
+        else:
+            table_names = set(inspect(db.engine).get_table_names())
+            if {"roles", "areas", "usuarios", "configuracion", "zonas_reunion"}.issubset(table_names):
+                seed_defaults()
+    start_background_dispatcher(app)
 
     @app.cli.command("init-db")
     def init_db_command():
         with app.app_context():
             db.create_all()
-            ensure_runtime_schema()
             seed_defaults()
             print("Base de datos inicializada con datos semilla.")
 
     @app.cli.command("dispatch-notifications")
     def dispatch_notifications_command():
         with app.app_context():
-            processed = dispatch_pending_notifications()
+            processed = dispatch_due_communications()
             db.session.commit()
-            print(f"Eventos procesados: {processed}")
+            print(
+                f"Eventos procesados: push={processed['push']}, email={processed['email']}"
+            )
 
     return app

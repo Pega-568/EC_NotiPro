@@ -2,6 +2,7 @@
 {% block content %}
 <section class="panel">
   <h2>Calendario operativo</h2>
+  <p class="muted">Use filtros por area o zona para revisar carga operativa, responsables y disponibilidad antes de crear nuevas reuniones.</p>
   <form method="get" class="row">
     <label>Vista
       <select name="view">
@@ -37,6 +38,11 @@
     </label>
   </form>
 </section>
+<section class="grid">
+  <article class="metric"><span class="muted">Rango visible</span><strong>{{ start_date }} a {{ end_date }}</strong></article>
+  <article class="metric"><span class="muted">Reuniones</span><strong>{{ meetings|length }}</strong></article>
+  <article class="metric"><span class="muted">Vista activa</span><strong>{{ view_mode|upper }}</strong></article>
+</section>
 
 {% if view_mode == "month" %}
 <section class="panel" style="margin-top: 1rem;">
@@ -57,7 +63,7 @@
         {% for row in meetings_by_day.get(day_key, [])[:4] %}
         <div style="margin-top:0.45rem; border-left:4px solid #003091; padding-left:0.4rem;">
           <div><strong>{{ row.meeting.hora_inicio.strftime('%H:%M') }}</strong> {{ row.meeting.titulo }}</div>
-          <div>{{ row.meeting.zona.nombre }}</div>
+          <div>{{ row.meeting.zona.nombre }} · Resp. {{ row.meeting.responsable.nombre }}</div>
           <div>{{ row.data.estado_visual }} · {{ row.response_label }}</div>
           <a href="/web/admin/reuniones/{{ row.meeting.id }}">Ver</a>
         </div>
@@ -72,7 +78,7 @@
 <section class="panel" style="margin-top: 1rem;">
   <h2>Reuniones del rango {{ start_date }} al {{ end_date }}</h2>
   <table>
-    <thead><tr><th>Fecha</th><th>Hora</th><th>Titulo</th><th>Zona</th><th>Estado</th><th>Respuestas</th><th>Acciones</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Hora</th><th>Titulo</th><th>Responsable</th><th>Zona</th><th>Estado</th><th>Respuestas</th><th>Acciones</th></tr></thead>
     <tbody>
       {% for meeting in meetings %}
       {% set data = meeting and namespace(v=meeting) %}
@@ -81,6 +87,7 @@
         <td>{{ meeting.fecha }}</td>
         <td>{{ meeting.hora_inicio.strftime('%H:%M') }} - {{ meeting.hora_fin.strftime('%H:%M') }}</td>
         <td>{{ meeting.titulo }}</td>
+        <td>{{ meeting.responsable.nombre }}</td>
         <td>{{ meeting.zona.nombre }}</td>
         <td>{{ serialized.estado_visual if serialized else meeting.estado }}</td>
         <td>{{ serialized.resumen_respuestas.aceptadas if serialized else 0 }}/{{ serialized.resumen_respuestas.total if serialized else 0 }}</td>
@@ -103,13 +110,14 @@
     <h3>{{ group.label }}</h3>
     {% if group.rows %}
     <table>
-      <thead><tr><th>Fecha</th><th>Hora</th><th>Titulo</th><th>Estado</th><th>Respuestas</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Hora</th><th>Titulo</th><th>Responsable</th><th>Estado</th><th>Respuestas</th><th>Acciones</th></tr></thead>
       <tbody>
         {% for row in group.rows %}
         <tr>
           <td>{{ row.meeting.fecha }}</td>
           <td>{{ row.meeting.hora_inicio.strftime('%H:%M') }} - {{ row.meeting.hora_fin.strftime('%H:%M') }}</td>
           <td>{{ row.meeting.titulo }}</td>
+          <td>{{ row.meeting.responsable.nombre }}</td>
           <td>{{ row.data.estado_visual }}</td>
           <td>{{ row.response_label }}</td>
           <td>

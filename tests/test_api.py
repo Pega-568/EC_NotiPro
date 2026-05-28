@@ -13,7 +13,7 @@ def _future_day():
     return (date.today() + timedelta(days=1)).isoformat()
 
 
-def _meeting_payload(participant_ids, zone_id=1, start="09:00", end="10:00"):
+def _meeting_payload(participant_ids, zone_id=1, start="09:00", end="10:00", responsible_id=None):
     return {
         "titulo": "Comite operativo",
         "motivo": "Revision semanal",
@@ -23,6 +23,7 @@ def _meeting_payload(participant_ids, zone_id=1, start="09:00", end="10:00"):
         "hora_fin": end,
         "prioridad": "Alta",
         "participant_ids": participant_ids,
+        "responsable_reunion_id": responsible_id or participant_ids[0],
     }
 
 
@@ -68,15 +69,15 @@ def test_admin_crea_reunion_multiarea(client, app):
 
 
 def test_agendador_crea_reunion_misma_area(client, app):
-    headers = login(client, "agendador.contabilidad@empresa.local", "Agenda123!")
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json=_meeting_payload([3, 4], zone_id=2), headers=headers)
     assert response.status_code == 201
 
 
-def test_agendador_no_puede_convocar_otra_area(client, app):
-    headers = login(client, "agendador.contabilidad@empresa.local", "Agenda123!")
+def test_secretaria_puede_convocar_otra_area(client, app):
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.post("/api/reuniones", json=_meeting_payload([3, 5], zone_id=2), headers=headers)
-    assert response.status_code == 403
+    assert response.status_code == 201
 
 
 def test_usuario_natural_no_puede_crear_reunion(client, app):
@@ -209,10 +210,10 @@ def test_admin_puede_buscar_usuarios_por_area(client):
     assert any(item["correo"] == "usuario1.contabilidad@empresa.local" for item in payload)
 
 
-def test_agendador_solo_puede_buscar_su_area(client):
-    headers = login(client, "agendador.contabilidad@empresa.local", "Agenda123!")
+def test_secretaria_puede_buscar_todas_las_areas(client):
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.get("/api/usuarios/buscar?area_id=2&q=usuario", headers=headers)
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 def test_usuario_natural_no_puede_buscar_usuarios(client):
@@ -231,3 +232,21 @@ def test_backend_rechaza_participante_inexistente(client):
     headers = login(client, "admin@empresa.local", "Admin123!")
     response = client.post("/api/reuniones", json=_meeting_payload([999]), headers=headers)
     assert response.status_code == 422
+
+
+def test_backend_exige_responsable_reunion(client):
+    headers = login(client, "admin@empresa.local", "Admin123!")
+    payload = _meeting_payload([3, 4])
+    payload.pop("responsable_reunion_id")
+    response = client.post("/api/reuniones", json=payload, headers=headers)
+    assert response.status_code == 422
+
+
+def test_responsable_se_serializa_y_genera_historial(client):
+    headers = login(client, "admin@empresa.local", "Admin123!")
+    response = client.post("/api/reuniones", json=_meeting_payload([3, 4], responsible_id=4), headers=headers)
+    meeting = response.get_json()
+    assert meeting["responsable_reunion_id"] == 4
+    history = client.get(f"/api/reuniones/{meeting['id']}/historial", headers=headers)
+    assert history.status_code == 200
+    assert history.get_json()["items"][0]["tipo_evento"] == "created"

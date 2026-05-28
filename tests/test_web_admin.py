@@ -124,6 +124,7 @@ def test_admin_puede_crear_reunion_multiarea(client, app):
             "hora_fin": "10:00",
             "zona_id": "1",
             "prioridad": "Alta",
+            "responsable_reunion_id": "3",
             "participant_ids": ["3", "5"],
         },
         follow_redirects=True,
@@ -147,6 +148,7 @@ def test_reunion_con_conflicto_se_rechaza(client):
             "hora_fin": "10:00",
             "zona_id": "1",
             "prioridad": "Alta",
+            "responsable_reunion_id": "3",
             "participant_ids": ["3"],
         },
         follow_redirects=True,
@@ -162,6 +164,7 @@ def test_reunion_con_conflicto_se_rechaza(client):
             "hora_fin": "10:30",
             "zona_id": "1",
             "prioridad": "Alta",
+            "responsable_reunion_id": "3",
             "participant_ids": ["3"],
         },
     )
@@ -182,6 +185,7 @@ def test_admin_puede_cancelar_reunion(client, app):
             "hora_fin": "12:00",
             "zona_id": "1",
             "prioridad": "Media",
+            "responsable_reunion_id": "3",
             "participant_ids": ["3"],
         },
         follow_redirects=True,
@@ -233,8 +237,8 @@ def test_dashboard_muestra_resumen_operativo(client):
     assert "Zonas ocupadas hoy" in body
 
 
-def test_agendador_no_puede_acceder_admin(client):
-    web_login(client, "agendador.contabilidad@empresa.local", "Agenda123!")
+def test_secretaria_no_puede_acceder_admin_usuarios(client):
+    web_login(client, "secretaria.general@empresa.local", "Agenda123!")
     response = client.get("/web/admin/usuarios")
     assert response.status_code == 403
 
@@ -275,6 +279,7 @@ def test_crear_reunion_con_participantes_seleccionados_funciona(client, app):
             "hora_fin": "15:00",
             "zona_id": "1",
             "prioridad": "Alta",
+            "responsable_reunion_id": "3",
             "participant_ids": ["3", "5"],
         },
         follow_redirects=True,
@@ -282,3 +287,11 @@ def test_crear_reunion_con_participantes_seleccionados_funciona(client, app):
     assert response.status_code == 200
     with app.app_context():
         assert Reunion.query.filter_by(titulo="Reunion Chips").first() is not None
+
+
+def test_formulario_reunion_muestra_responsable_obligatorio(client):
+    web_login(client)
+    response = client.get("/web/admin/reuniones/nueva")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Responsable de reunion" in body

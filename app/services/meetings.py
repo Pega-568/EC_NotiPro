@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, time, timedelta
 
 from flask import g
-from sqlalchemy import and_, or_
 
 from app.audit import log_event
-from app.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
+from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_SECRETARIA
+from app.errors import ConflictError, ForbiddenError, ValidationError
 from app.extensions import db
-from app.models import Configuracion, Reunion, ReunionParticipante, Usuario, ZonaReunion
-from app.services.notifications import queue_meeting_notifications
+from app.models import (
+    Configuracion,
+    Reunion,
+    ReunionHistorial,
+    ReunionParticipante,
+    Usuario,
+    ZonaReunion,
+)
+from app.services.notifications import (
+    dispatch_due_communications,
+    queue_meeting_emails,
+    queue_meeting_notifications,
+)
 
 
 def _config_int(key: str, default: int) -> int:
@@ -46,14 +58,23 @@ def _validate_participants(participant_ids: list[int]) -> list[Usuario]:
     return users
 
 
-def _validate_actor_scope(actor, participants: list[Usuario]) -> None:
-    area_ids = {user.area_id for user in participants}
-    area_ids.add(actor.area_id)
-    if actor.role.nombre == "Agendador":
-        if any(user.area_id != actor.area_id for user in participants):
-            raise ForbiddenError("Agendador solo puede convocar usuarios de su misma area.")
-    if len(area_ids) > 1 and actor.role.nombre != "Admin":
-        raise ForbiddenError("Solo Admin puede crear reuniones multi area.")
+def _validate_actor_scope(actor: Usuario) -> None:
+    if actor.role.nombre not in OPERATOR_ROLES:
+        raise ForbiddenError("No tiene permiso para crear o editar reuniones.")
+
+
+def _validate_responsable(
+    responsable_reunion_id: int, participants: list[Usuario], actor: Usuario
+) -> Usuario:
+    responsable = Usuario.query.get(responsable_reunion_id)
+    if not responsable or responsable.estado != "Activo":
+        raise ValidationError("Debe seleccionar un responsable de reunion activo.")
+    participant_ids = {user.id for user in participants}
+    if responsable.id not in participant_ids and responsable.id != actor.id:
+        raise ValidationError(
+            "El responsable de reunion debe ser participante invitado o la persona que registra la reunion."
+        )
+    return responsable
 
 
 def _validate_basic_schedule(fecha: date, hora_inicio: time, hora_fin: time) -> None:
@@ -162,7 +183,11 @@ def serialize_meeting(meeting: Reunion) -> dict:
         "motivo": meeting.motivo,
         "creador_id": meeting.creador_id,
         "creador_nombre": meeting.creador.nombre,
+        "responsable_reunion_id": meeting.responsable_reunion_id,
+        "responsable_reunion_nombre": meeting.responsable.nombre,
+        "responsable_reunion_correo": meeting.responsable.correo,
         "area_origen_id": meeting.area_origen_id,
+        "area_origen_nombre": meeting.area_origen.nombre,
         "zona_id": meeting.zona_id,
         "zona_nombre": meeting.zona.nombre,
         "fecha": meeting.fecha.isoformat(),
@@ -195,15 +220,23 @@ def serialize_meeting(meeting: Reunion) -> dict:
 
 def create_meeting(payload: dict) -> Reunion:
     actor = g.current_user
-    if actor.role.nombre not in ("Admin", "Agendador"):
-        raise ForbiddenError("No tiene permiso para crear reuniones.")
-    required = ("titulo", "motivo", "zona_id", "fecha", "hora_inicio", "hora_fin", "participant_ids")
+    _validate_actor_scope(actor)
+    required = (
+        "titulo",
+        "motivo",
+        "zona_id",
+        "fecha",
+        "hora_inicio",
+        "hora_fin",
+        "participant_ids",
+        "responsable_reunion_id",
+    )
     missing = [field for field in required if field not in payload or payload.get(field) in (None, "", [])]
     if missing:
         raise ValidationError(f"Faltan campos obligatorios: {', '.join(missing)}.")
     participant_ids = [int(value) for value in payload.get("participant_ids", [])]
     participants = _validate_participants(participant_ids)
-    _validate_actor_scope(actor, participants)
+    responsable = _validate_responsable(int(payload["responsable_reunion_id"]), participants, actor)
 
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
@@ -211,12 +244,14 @@ def create_meeting(payload: dict) -> Reunion:
     _validate_basic_schedule(fecha, hora_inicio, hora_fin)
     zone = _find_zone(int(payload["zona_id"]))
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin)
-    _validate_person_conflicts(participant_ids, fecha, hora_inicio, hora_fin)
+    participant_conflict_ids = list({responsable.id, *participant_ids})
+    _validate_person_conflicts(participant_conflict_ids, fecha, hora_inicio, hora_fin)
 
     meeting = Reunion(
         titulo=payload["titulo"].strip(),
         motivo=payload["motivo"].strip(),
         creador_id=actor.id,
+        responsable_reunion_id=responsable.id,
         area_origen_id=actor.area_id,
         zona_id=zone.id,
         fecha=fecha,
@@ -243,6 +278,7 @@ def create_meeting(payload: dict) -> Reunion:
         detail={
             "participantes": participant_ids,
             "participant_names": [participant.nombre for participant in participants],
+            "responsable_nombre": responsable.nombre,
             "zona_id": zone.id,
             "zona_nombre": zone.nombre,
             "meeting_title": meeting.titulo,
@@ -252,34 +288,55 @@ def create_meeting(payload: dict) -> Reunion:
         },
     )
     queue_meeting_notifications(meeting, "meeting_created")
+    queue_meeting_emails(meeting, "meeting_created")
+    _append_history(meeting, "created", previous_status=None)
     db.session.commit()
+    _dispatch_after_commit()
     return meeting
 
 
 def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
     actor = g.current_user
-    if actor.role.nombre != "Admin":
-        raise ForbiddenError("Solo Admin puede modificar reuniones.")
+    if actor.role.nombre not in OPERATOR_ROLES:
+        raise ForbiddenError("Solo el personal autorizado puede modificar reuniones.")
     if meeting.estado == "Cancelada":
         raise ValidationError("No se puede editar una reunion cancelada.")
-    required = ("titulo", "motivo", "zona_id", "fecha", "hora_inicio", "hora_fin", "participant_ids")
+    required = (
+        "titulo",
+        "motivo",
+        "zona_id",
+        "fecha",
+        "hora_inicio",
+        "hora_fin",
+        "participant_ids",
+        "responsable_reunion_id",
+    )
     missing = [field for field in required if field not in payload or payload.get(field) in (None, "", [])]
     if missing:
         raise ValidationError(f"Faltan campos obligatorios: {', '.join(missing)}.")
 
     participant_ids = [int(value) for value in payload.get("participant_ids", [])]
     participants = _validate_participants(participant_ids)
-    _validate_actor_scope(actor, participants)
+    responsable = _validate_responsable(int(payload["responsable_reunion_id"]), participants, actor)
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
     hora_fin = datetime.strptime(payload["hora_fin"], "%H:%M").time()
     _validate_basic_schedule(fecha, hora_inicio, hora_fin)
     zone = _find_zone(int(payload["zona_id"]))
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin, meeting_id=meeting.id)
-    _validate_person_conflicts(participant_ids, fecha, hora_inicio, hora_fin, meeting_id=meeting.id)
+    participant_conflict_ids = list({responsable.id, *participant_ids})
+    _validate_person_conflicts(
+        participant_conflict_ids,
+        fecha,
+        hora_inicio,
+        hora_fin,
+        meeting_id=meeting.id,
+    )
 
+    previous_status = meeting.estado
     meeting.titulo = payload["titulo"].strip()
     meeting.motivo = payload["motivo"].strip()
+    meeting.responsable_reunion_id = responsable.id
     meeting.zona_id = zone.id
     meeting.fecha = fecha
     meeting.hora_inicio = hora_inicio
@@ -300,17 +357,21 @@ def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
         "reunion",
         "exitoso",
         entity_id=meeting.id,
-        detail={"meeting_title": meeting.titulo},
+        detail={"meeting_title": meeting.titulo, "responsable_nombre": responsable.nombre},
     )
     queue_meeting_notifications(meeting, "meeting_updated")
+    queue_meeting_emails(meeting, "meeting_updated")
+    _append_history(meeting, "updated", previous_status=previous_status)
     db.session.commit()
+    _dispatch_after_commit()
     return meeting
 
 
 def cancel_meeting(meeting: Reunion) -> Reunion:
     actor = g.current_user
-    if actor.role.nombre != "Admin":
-        raise ForbiddenError("Solo Admin puede cancelar reuniones.")
+    if actor.role.nombre not in OPERATOR_ROLES:
+        raise ForbiddenError("Solo el personal autorizado puede cancelar reuniones.")
+    previous_status = meeting.estado
     meeting.estado = "Cancelada"
     log_event(
         "cancelacion_reunion",
@@ -325,28 +386,42 @@ def cancel_meeting(meeting: Reunion) -> Reunion:
         },
     )
     queue_meeting_notifications(meeting, "meeting_canceled")
+    queue_meeting_emails(meeting, "meeting_canceled")
+    _append_history(meeting, "canceled", previous_status=previous_status)
     db.session.commit()
+    _dispatch_after_commit()
     return meeting
 
 
 def respond_to_meeting(meeting: Reunion, *, accept: bool, reason: str | None = None) -> ReunionParticipante:
     actor = g.current_user
     item = next((row for row in meeting.participantes if row.usuario_id == actor.id), None)
-    if not item:
+    if not item and meeting.responsable_reunion_id != actor.id:
         raise ForbiddenError("No participa en esta reunion.")
     if meeting.estado == "Cancelada":
         raise ValidationError("No puede responder una reunion cancelada.")
+    if not item:
+        item = ReunionParticipante(
+            reunion_id=meeting.id,
+            usuario_id=actor.id,
+            estado_respuesta="Pendiente",
+        )
+        db.session.add(item)
+        db.session.flush()
     if accept:
         item.estado_respuesta = "Aceptada"
         item.razon_rechazo = None
         action = "aceptacion_reunion"
+        response_status = "Aceptada"
     else:
         if not reason or not reason.strip():
             raise ValidationError("Debe indicar una razon de rechazo.")
         item.estado_respuesta = "Rechazada"
         item.razon_rechazo = reason.strip()
         action = "rechazo_reunion"
+        response_status = "Rechazada"
     item.fecha_respuesta = datetime.utcnow()
+    previous_status = meeting.estado
     if any(row.estado_respuesta == "Rechazada" for row in meeting.participantes):
         meeting.estado = "Rechazada"
     elif all(row.estado_respuesta == "Aceptada" for row in meeting.participantes):
@@ -364,5 +439,44 @@ def respond_to_meeting(meeting: Reunion, *, accept: bool, reason: str | None = N
             "razon_rechazo": item.razon_rechazo,
         },
     )
+    queue_meeting_notifications(
+        meeting,
+        "meeting_response",
+        {
+            "responder_nombre": actor.nombre,
+            "response_status": response_status,
+            "response_reason": item.razon_rechazo,
+        },
+    )
+    queue_meeting_emails(
+        meeting,
+        "meeting_response",
+        {
+            "responder_nombre": actor.nombre,
+            "response_status": response_status,
+            "response_reason": item.razon_rechazo,
+        },
+    )
+    _append_history(meeting, "response", previous_status=previous_status)
     db.session.commit()
+    _dispatch_after_commit()
     return item
+
+
+def _append_history(meeting: Reunion, event_type: str, previous_status: str | None) -> None:
+    actor = getattr(g, "current_user", None)
+    history = ReunionHistorial(
+        reunion_id=meeting.id,
+        actor_usuario_id=getattr(actor, "id", None),
+        tipo_evento=event_type,
+        estado_anterior=previous_status,
+        estado_nuevo=meeting.estado,
+        snapshot_json=json.dumps(serialize_meeting(meeting), ensure_ascii=True),
+        changed_at=datetime.utcnow(),
+    )
+    db.session.add(history)
+
+
+def _dispatch_after_commit() -> None:
+    dispatch_due_communications(now=datetime.utcnow())
+    db.session.commit()

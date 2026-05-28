@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.constants import ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA
 from app.models import Area, Configuracion, Role, Usuario, ZonaReunion
 from app.security import hash_password
 
@@ -12,11 +13,21 @@ DEFAULT_CONFIG = {
     "debug_mode": ("false", "Controla la visualizacion de datos tecnicos en interfaces."),
     "recordatorio_30_minutos": ("true", "Activa recordatorio 30 minutos antes."),
     "recordatorio_10_minutos": ("true", "Activa recordatorio 10 minutos antes."),
+    "correo_formal_automatico": ("true", "Activa los correos formales automaticos."),
 }
 
 
 def seed_defaults() -> None:
-    for role_name in ("Admin", "Agendador", "Usuario natural"):
+    role_aliases = {
+        "Admin": ROLE_ADMIN,
+        "Agendador": ROLE_SECRETARIA,
+        "Usuario natural": ROLE_COLABORADOR,
+    }
+    for legacy_name, role_name in role_aliases.items():
+        legacy = Role.query.filter_by(nombre=legacy_name).first()
+        if legacy:
+            legacy.nombre = role_name
+    for role_name in (ROLE_ADMIN, ROLE_SECRETARIA, ROLE_COLABORADOR):
         if not Role.query.filter_by(nombre=role_name).first():
             db.session.add(Role(nombre=role_name))
     db.session.flush()
@@ -36,35 +47,35 @@ def seed_defaults() -> None:
         if not Configuracion.query.filter_by(clave=key).first():
             db.session.add(Configuracion(clave=key, valor=value, descripcion=description))
 
-    admin_role = Role.query.filter_by(nombre="Admin").first()
-    scheduler_role = Role.query.filter_by(nombre="Agendador").first()
-    user_role = Role.query.filter_by(nombre="Usuario natural").first()
+    admin_role = Role.query.filter_by(nombre=ROLE_ADMIN).first()
+    scheduler_role = Role.query.filter_by(nombre=ROLE_SECRETARIA).first()
+    user_role = Role.query.filter_by(nombre=ROLE_COLABORADOR).first()
 
     users = [
-        ("Admin Principal", "admin@empresa.local", "Admin123!", admin_role.id, areas["Contabilidad"].id),
+        ("Administrador Principal", "admin@empresa.local", "Admin123!", admin_role.id, areas["Contabilidad"].id),
         (
-            "Agendador Contabilidad",
-            "agendador.contabilidad@empresa.local",
+            "Secretaria General",
+            "secretaria.general@empresa.local",
             "Agenda123!",
             scheduler_role.id,
             areas["Contabilidad"].id,
         ),
         (
-            "Usuario 1 Contabilidad",
+            "Colaborador 1 Contabilidad",
             "usuario1.contabilidad@empresa.local",
             "Usuario123!",
             user_role.id,
             areas["Contabilidad"].id,
         ),
         (
-            "Usuario 2 Contabilidad",
+            "Colaborador 2 Contabilidad",
             "usuario2.contabilidad@empresa.local",
             "Usuario123!",
             user_role.id,
             areas["Contabilidad"].id,
         ),
         (
-            "Usuario 1 Mercado",
+            "Colaborador 1 Mercado",
             "usuario1.mercado@empresa.local",
             "Usuario123!",
             user_role.id,

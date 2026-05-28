@@ -19,7 +19,7 @@ class Role(db.Model):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(db.String(50), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(db.String(80), unique=True, nullable=False)
 
 
 class Area(TimestampMixin, db.Model):
@@ -89,12 +89,16 @@ class Reunion(TimestampMixin, db.Model):
             name="ck_reuniones_prioridad",
         ),
         Index("ix_reuniones_fecha_hora", "fecha", "hora_inicio", "hora_fin"),
+        Index("ix_reuniones_responsable", "responsable_reunion_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     titulo: Mapped[str] = mapped_column(db.String(150), nullable=False)
     motivo: Mapped[str] = mapped_column(db.String(500), nullable=False)
     creador_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    responsable_reunion_id: Mapped[int] = mapped_column(
+        ForeignKey("usuarios.id"), nullable=False
+    )
     area_origen_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
     zona_id: Mapped[int] = mapped_column(ForeignKey("zonas_reunion.id"), nullable=False)
     fecha: Mapped[date] = mapped_column(nullable=False)
@@ -104,9 +108,13 @@ class Reunion(TimestampMixin, db.Model):
     prioridad: Mapped[str] = mapped_column(db.String(20), default="Media", nullable=False)
 
     creador: Mapped[Usuario] = relationship(foreign_keys=[creador_id])
+    responsable: Mapped[Usuario] = relationship(foreign_keys=[responsable_reunion_id])
     area_origen: Mapped[Area] = relationship()
     zona: Mapped[ZonaReunion] = relationship()
     participantes: Mapped[list[ReunionParticipante]] = relationship(
+        back_populates="reunion", cascade="all, delete-orphan"
+    )
+    historial: Mapped[list[ReunionHistorial]] = relationship(
         back_populates="reunion", cascade="all, delete-orphan"
     )
 
@@ -134,11 +142,34 @@ class ReunionParticipante(db.Model):
     usuario: Mapped[Usuario] = relationship()
 
 
+class ReunionHistorial(db.Model):
+    __tablename__ = "reunion_historial"
+    __table_args__ = (
+        CheckConstraint(
+            "tipo_evento IN ('created', 'updated', 'canceled', 'response', 'finalized')",
+            name="ck_reunion_historial_tipo",
+        ),
+        Index("ix_reunion_historial_reunion", "reunion_id", "changed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reunion_id: Mapped[int] = mapped_column(ForeignKey("reuniones.id"), nullable=False)
+    actor_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    tipo_evento: Mapped[str] = mapped_column(db.String(30), nullable=False)
+    estado_anterior: Mapped[str | None] = mapped_column(db.String(20))
+    estado_nuevo: Mapped[str | None] = mapped_column(db.String(20))
+    snapshot_json: Mapped[str] = mapped_column(db.Text, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+
+    reunion: Mapped[Reunion] = relationship(back_populates="historial")
+    actor: Mapped[Usuario | None] = relationship(foreign_keys=[actor_usuario_id])
+
+
 class Configuracion(db.Model):
     __tablename__ = "configuracion"
 
     clave: Mapped[str] = mapped_column(db.String(100), primary_key=True)
-    valor: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    valor: Mapped[str] = mapped_column(db.Text, nullable=False)
     descripcion: Mapped[str | None] = mapped_column(db.String(255))
 
 
@@ -147,12 +178,14 @@ class DeviceToken(TimestampMixin, db.Model):
     __table_args__ = (
         UniqueConstraint("token", name="uq_device_token"),
         CheckConstraint("plataforma IN ('android')", name="ck_device_token_plataforma"),
-        CheckConstraint("estado IN ('Activo', 'Inactivo', 'Invalido')", name="ck_device_token_estado"),
+        CheckConstraint(
+            "estado IN ('Activo', 'Inactivo', 'Invalido')", name="ck_device_token_estado"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
-    token: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    token: Mapped[str] = mapped_column(db.String(512), nullable=False)
     plataforma: Mapped[str] = mapped_column(db.String(30), default="android", nullable=False)
     estado: Mapped[str] = mapped_column(db.String(20), default="Activo", nullable=False)
     app_version: Mapped[str | None] = mapped_column(db.String(50))
@@ -166,10 +199,18 @@ class NotificationEvent(TimestampMixin, db.Model):
     __tablename__ = "notification_events"
     __table_args__ = (
         CheckConstraint(
-            "tipo_evento IN ('meeting_created', 'meeting_updated', 'meeting_canceled', 'reminder_30', 'reminder_10')",
+            (
+                "tipo_evento IN ("
+                "'meeting_created', 'meeting_updated', 'meeting_canceled', "
+                "'meeting_response', 'reminder_30', 'reminder_10')"
+            ),
             name="ck_notification_event_tipo",
         ),
-        CheckConstraint("estado IN ('Pendiente', 'Enviado', 'Fallido')", name="ck_notification_event_estado"),
+        CheckConstraint(
+            "estado IN ('Pendiente', 'Enviado', 'Fallido')",
+            name="ck_notification_event_estado",
+        ),
+        Index("ix_notification_event_programado", "estado", "programado_para"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -204,6 +245,56 @@ class NotificationLog(TimestampMixin, db.Model):
     device_token: Mapped[DeviceToken | None] = relationship(foreign_keys=[device_token_id])
 
 
+class EmailEvent(TimestampMixin, db.Model):
+    __tablename__ = "email_events"
+    __table_args__ = (
+        CheckConstraint(
+            (
+                "tipo_evento IN ("
+                "'meeting_created', 'meeting_updated', 'meeting_canceled', "
+                "'meeting_response', 'reminder_30', 'reminder_10')"
+            ),
+            name="ck_email_event_tipo",
+        ),
+        CheckConstraint(
+            "estado IN ('Pendiente', 'Enviado', 'Fallido')",
+            name="ck_email_event_estado",
+        ),
+        Index("ix_email_event_programado", "estado", "programado_para"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reunion_id: Mapped[int | None] = mapped_column(ForeignKey("reuniones.id"))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    destinatario_correo: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    tipo_evento: Mapped[str] = mapped_column(db.String(40), nullable=False)
+    asunto: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    cuerpo_texto: Mapped[str] = mapped_column(db.Text, nullable=False)
+    estado: Mapped[str] = mapped_column(db.String(20), default="Pendiente", nullable=False)
+    programado_para: Mapped[datetime | None]
+
+    reunion: Mapped[Reunion | None] = relationship()
+    usuario: Mapped[Usuario | None] = relationship(foreign_keys=[usuario_id])
+
+
+class EmailLog(TimestampMixin, db.Model):
+    __tablename__ = "email_logs"
+    __table_args__ = (
+        CheckConstraint(
+            "resultado IN ('enviado', 'fallido')",
+            name="ck_email_log_resultado",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email_event_id: Mapped[int] = mapped_column(ForeignKey("email_events.id"), nullable=False)
+    resultado: Mapped[str] = mapped_column(db.String(30), nullable=False)
+    detalle: Mapped[str | None] = mapped_column(db.String(500))
+    enviado_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+
+    event: Mapped[EmailEvent] = relationship()
+
+
 class LogSistema(db.Model):
     __tablename__ = "logs_sistema"
     __table_args__ = (
@@ -212,7 +303,7 @@ class LogSistema(db.Model):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_actor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
-    rol_actor: Mapped[str | None] = mapped_column(db.String(50))
+    rol_actor: Mapped[str | None] = mapped_column(db.String(80))
     accion: Mapped[str] = mapped_column(db.String(100), nullable=False)
     entidad: Mapped[str] = mapped_column(db.String(100), nullable=False)
     entidad_id: Mapped[str | None] = mapped_column(db.String(50))

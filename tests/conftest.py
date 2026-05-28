@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import create_app
+from app.constants import ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA
 from app.extensions import db
 from app.models import Area, Configuracion, DeviceToken, NotificationEvent, NotificationLog, Reunion, ReunionParticipante, Role, Usuario, ZonaReunion
 from app.security import hash_password
@@ -13,9 +14,9 @@ def app():
     app = create_app("testing")
     with app.app_context():
         db.create_all()
-        admin_role = Role(nombre="Admin")
-        scheduler_role = Role(nombre="Agendador")
-        user_role = Role(nombre="Usuario natural")
+        admin_role = Role(nombre=ROLE_ADMIN)
+        scheduler_role = Role(nombre=ROLE_SECRETARIA)
+        user_role = Role(nombre=ROLE_COLABORADOR)
         db.session.add_all([admin_role, scheduler_role, user_role])
         conta = Area(nombre="Contabilidad", estado="Activa")
         mercado = Area(nombre="Mercado Privado", estado="Activa")
@@ -31,8 +32,8 @@ def app():
                 area_id=conta.id,
             ),
             Usuario(
-                nombre="Agendador",
-                correo="agendador.contabilidad@empresa.local",
+                nombre="Secretaria",
+                correo="secretaria.general@empresa.local",
                 telefono="0990000002",
                 password_hash=hash_password("Agenda123!"),
                 role_id=scheduler_role.id,

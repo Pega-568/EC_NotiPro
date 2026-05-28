@@ -2,6 +2,7 @@
 {% block content %}
 <section class="panel">
   <h2>{% if is_new %}Nueva reunion{% else %}Editar reunion{% endif %}</h2>
+  <p class="muted">Cada reunion debe tener un responsable claro. El sistema usara este dato para reportes, correos y seguimiento historico.</p>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
     <div class="row">
@@ -22,6 +23,16 @@
           <option value="Baja" {% if form_data.prioridad == "Baja" %}selected{% endif %}>Baja</option>
           <option value="Media" {% if form_data.prioridad == "Media" %}selected{% endif %}>Media</option>
           <option value="Alta" {% if form_data.prioridad == "Alta" %}selected{% endif %}>Alta</option>
+        </select>
+      </label>
+      <label>Responsable de reunion
+        <select name="responsable_reunion_id" required>
+          <option value="">Seleccione</option>
+          {% for user in responsible_candidates %}
+          <option value="{{ user.id }}" {% if form_data.responsable_reunion_id|string == user.id|string %}selected{% endif %}>
+            {{ user.nombre }} · {{ user.area.nombre }}
+          </option>
+          {% endfor %}
         </select>
       </label>
     </div>
