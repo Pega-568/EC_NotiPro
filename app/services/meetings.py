@@ -275,8 +275,8 @@ def create_meeting(payload: dict) -> Reunion:
     _validate_basic_schedule(fecha, hora_inicio, hora_fin)
     zone = _find_zone(int(payload["zona_id"]))
     
-    if actor.role.nombre == ROLE_AGENDADOR and zone.area_id != actor.area_id:
-        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área.")
+    if actor.role.nombre == ROLE_AGENDADOR and zone.area_id not in (actor.area_id, None):
+        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área o zonas globales.")
         
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin)
     participant_conflict_ids = list({responsable.id, *participant_ids})
@@ -364,8 +364,8 @@ def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
     _validate_basic_schedule(fecha, hora_inicio, hora_fin)
     zone = _find_zone(int(payload["zona_id"]))
     
-    if actor.role.nombre == ROLE_AGENDADOR and zone.area_id != actor.area_id:
-        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área.")
+    if actor.role.nombre == ROLE_AGENDADOR and zone.area_id not in (actor.area_id, None):
+        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área o zonas globales.")
         
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin, meeting_id=meeting.id)
     participant_conflict_ids = list({responsable.id, *participant_ids})

@@ -68,6 +68,13 @@ def create_app(config_object=None) -> Flask:
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception):
+        db.session.rollback()
+        try:
+            log_event("error_sistema", "backend", "fallido", detail={"ruta": request.path, "error": str(exc)})
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            
         if request.path.startswith("/api/"):
             return (
                 jsonify(

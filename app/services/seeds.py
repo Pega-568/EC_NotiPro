@@ -20,7 +20,7 @@ DEFAULT_CONFIG = {
 def seed_defaults() -> None:
     role_aliases = {
         "Admin": ROLE_ADMIN,
-        "Agendador": ROLE_SECRETARIA,
+        "Agendador": ROLE_AGENDADOR,
         "Usuario natural": ROLE_COLABORADOR,
     }
     for legacy_name, role_name in role_aliases.items():
