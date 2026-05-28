@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
@@ -497,7 +498,16 @@ private fun AppRoot(viewModel: AppViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val coroutineScope = rememberCoroutineScope()
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted -> 
+        coroutineScope.launch {
+            if (uiState.currentUser != null) {
+                val status = runCatching { NotificationRegistrar.sync(context) }
+                    .getOrElse { "No fue posible preparar notificaciones." }
+                viewModel.setPushStatus(status)
+            }
+        }
+    }
     val launchMeetingId by MeetingLaunchBus.meetingId.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.errorMessage) {

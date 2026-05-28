@@ -25,7 +25,9 @@ object MeetingLaunchBus {
     val meetingId: StateFlow<Int?> = _meetingId.asStateFlow()
 
     fun publishFromIntent(intent: Intent?) {
-        val meetingId = intent?.getIntExtra(launchMeetingExtra, 0) ?: 0
+        val extras = intent?.extras
+        val meetingIdStr = extras?.getString(launchMeetingExtra) ?: extras?.get(launchMeetingExtra)?.toString()
+        val meetingId = meetingIdStr?.toIntOrNull() ?: intent?.getIntExtra(launchMeetingExtra, 0) ?: 0
         if (meetingId > 0) {
             _meetingId.value = meetingId
         }
@@ -88,7 +90,13 @@ object NotificationRegistrar {
             return status
         }
         MobileRepository(sessionStore).registerDeviceToken(token)
-        val status = "Dispositivo listo para notificaciones."
+        
+        val status = if (!NotificationPermissionHelper.isGranted(context)) {
+            "Permiso de notificaciones denegado."
+        } else {
+            "Dispositivo listo para notificaciones."
+        }
+        
         sessionStore.savePushStatus(status)
         return status
     }

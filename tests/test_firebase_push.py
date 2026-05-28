@@ -44,6 +44,9 @@ def test_send_push_success(mock_send, mock_certificate, mock_firebase_admin, app
         assert message_arg.notification.body == "Nueva actualización de reunión. Abra la app para revisar los detalles."
         assert message_arg.data["type"] == "meeting_created"
         assert message_arg.data["meeting_id"] == "1"
+        assert message_arg.data["title"] == "EC_NotiPro"
+        assert message_arg.data["body"] == "Nueva actualización de reunión. Abra la app para revisar los detalles."
+        assert message_arg.data["channel_id"] == "reuniones"
 
 
 @patch("app.services.notifications.firebase_admin")

@@ -402,6 +402,9 @@ def _send_push(device_token: str, event_type: str, payload: dict) -> dict:
             data={
                 "type": event_type,
                 "meeting_id": str(payload.get("meeting_id", "")),
+                "title": title,
+                "body": body,
+                "channel_id": channel_id,
             },
             token=device_token,
             android=messaging.AndroidConfig(
