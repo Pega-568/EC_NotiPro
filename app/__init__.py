@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from sqlalchemy import inspect
 from flask import Flask, jsonify, request
 
 from app.config import Config, TestConfig
@@ -93,10 +92,6 @@ def create_app(config_object=None) -> Flask:
     with app.app_context():
         if app.config.get("TESTING"):
             db.create_all()
-        else:
-            table_names = set(inspect(db.engine).get_table_names())
-            if {"roles", "areas", "usuarios", "configuracion", "zonas_reunion"}.issubset(table_names):
-                seed_defaults()
     start_background_dispatcher(app)
 
     @app.cli.command("init-db")
