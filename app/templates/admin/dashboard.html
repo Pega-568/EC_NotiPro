@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid">
+  {% for key, value in counts.items() %}
+  <article class="panel">
+    <h3>{{ key|capitalize }}</h3>
+    <p style="font-size: 2rem; margin: 0;">{{ value }}</p>
+  </article>
+  {% endfor %}
+</section>
+<section class="panel" style="margin-top: 1rem;">
+  <h2>Acciones rapidas</h2>
+  <div class="actions">
+    <a class="button-link" href="/web/admin/calendario">Abrir calendario</a>
+    <a class="button-link" href="/web/admin/usuarios/nuevo">Nuevo usuario</a>
+    <a class="button-link" href="/web/admin/areas/nueva">Nueva area</a>
+    <a class="button-link" href="/web/admin/zonas/nueva">Nueva zona</a>
+    <a class="button-link" href="/web/admin/reuniones/nueva">Nueva reunion</a>
+  </div>
+</section>
+<section class="panel" style="margin-top: 1rem;">
+  <h2>Resumen operativo</h2>
+  <div class="grid">
+    <article>
+      <strong>Reuniones hoy</strong>
+      <p>{{ counts.reuniones_hoy }}</p>
+    </article>
+    <article>
+      <strong>Pendientes de respuesta</strong>
+      <p>{{ counts.pendientes_respuesta }}</p>
+    </article>
+    <article>
+      <strong>Rechazos registrados</strong>
+      <p>{{ counts.rechazos }}</p>
+    </article>
+    <article>
+      <strong>Zonas ocupadas hoy</strong>
+      <p>{{ counts.zonas_ocupadas_hoy }}</p>
+    </article>
+  </div>
+  {% if debug_mode %}
+  <p><span class="badge">DEBUG</span> El modo debug del sistema esta activo.</p>
+  {% endif %}
+</section>
+<section class="panel" style="margin-top: 1rem;">
+  <h2>Proximas reuniones</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Titulo</th><th>Fecha</th><th>Estado</th><th>Respuestas</th><th>Accion</th></tr></thead>
+    <tbody>
+      {% for meeting in meetings %}
+      {% set item = meeting and meeting %}
+      {% set summary = serialize_meeting(meeting).resumen_respuestas if serialize_meeting is defined else none %}
+      <tr>
+        <td>{{ meeting.id }}</td>
+        <td>{{ meeting.titulo }}</td>
+        <td>{{ meeting.fecha }} {{ meeting.hora_inicio.strftime("%H:%M") }} - {{ meeting.hora_fin.strftime("%H:%M") }}</td>
+        <td>{{ meeting.estado }}</td>
+        <td>{{ summary.aceptadas if summary else 0 }}/{{ summary.total if summary else 0 }} aceptadas</td>
+        <td><a href="/web/admin/reuniones/{{ meeting.id }}">Ver detalle</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

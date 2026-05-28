@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Zonas de reunion</h2>
+  <div class="actions" style="margin-bottom: 1rem;">
+    <a class="button-link" href="/web/admin/zonas/nueva">Crear zona</a>
+  </div>
+  <table>
+    <thead><tr><th>ID</th><th>Nombre</th><th>Ubicacion</th><th>Capacidad</th><th>Area</th><th>Estado</th><th>Margen</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for zone in zones %}
+      <tr>
+        <td>{{ zone.id }}</td>
+        <td>{{ zone.nombre }}</td>
+        <td>{{ zone.ubicacion }}</td>
+        <td>{{ zone.capacidad }}</td>
+        <td>{{ zone.area.nombre if zone.area else "-" }}</td>
+        <td>{{ zone.estado }}</td>
+        <td>{{ zone.margen_operativo_minutos }} min</td>
+        <td>
+          <div class="actions">
+            <a href="/web/admin/zonas/{{ zone.id }}/editar">Editar</a>
+            {% if zone.estado == "Activa" %}
+            <form class="inline-form" method="post" action="/web/admin/zonas/{{ zone.id }}/desactivar">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+              <button type="submit">Desactivar</button>
+            </form>
+            {% else %}
+            <form class="inline-form" method="post" action="/web/admin/zonas/{{ zone.id }}/activar">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+              <button type="submit">Activar</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

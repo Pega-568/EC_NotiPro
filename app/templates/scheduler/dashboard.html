@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid">
+  <article class="panel"><h3>Area</h3><p>{{ area_name }}</p></article>
+  <article class="panel"><h3>Usuarios de mi area</h3><p>{{ users_count }}</p></article>
+  <article class="panel"><h3>Zonas activas</h3><p>{{ zones_count }}</p></article>
+</section>
+<section class="panel" style="margin-top: 1rem;">
+  <h2>Actividad reciente</h2>
+  <table>
+    <thead><tr><th>Titulo</th><th>Fecha</th><th>Estado</th></tr></thead>
+    <tbody>
+      {% for meeting in meetings %}
+      <tr><td>{{ meeting.titulo }}</td><td>{{ meeting.fecha }} {{ meeting.hora_inicio }}</td><td>{{ meeting.estado }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Respuestas recibidas</h2>
+  {% for meeting in meetings %}
+  <article style="border-bottom: 1px solid #d7c8b8; padding: 1rem 0;">
+    <h3>{{ meeting.titulo }}</h3>
+    {% for participant in meeting.participantes %}
+    <div>{{ participant.usuario.nombre }}: {{ participant.estado_respuesta }}{% if participant.razon_rechazo %} - {{ participant.razon_rechazo }}{% endif %}</div>
+    {% endfor %}
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}
+

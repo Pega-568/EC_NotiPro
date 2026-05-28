@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Logs de auditoria</h2>
+  <table>
+    <thead><tr><th>Fecha</th><th>Evento</th><th>Usuario actor</th><th>Resultado</th><th>Origen/IP</th><th>Detalle tecnico</th></tr></thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>{{ log.fecha_hora }}</td>
+        <td>{{ log.descripcion_humana or "-" }}</td>
+        <td>{{ log.usuario_actor.nombre if log.usuario_actor else "Sistema" }}{% if log.rol_actor %}<br><span class="badge">{{ log.rol_actor }}</span>{% endif %}</td>
+        <td>{{ log.resultado }}</td>
+        <td>{{ log.ip or "-" }}<br>{{ log.user_agent or "-" }}</td>
+        <td>
+          <details>
+            <summary>Ver detalle tecnico</summary>
+            <div><strong>Accion:</strong> {{ log.accion }}</div>
+            <div><strong>Entidad:</strong> {{ log.entidad }} {{ log.entidad_id or "" }}</div>
+            <pre>{{ log.detalle_seguro or "-" }}</pre>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

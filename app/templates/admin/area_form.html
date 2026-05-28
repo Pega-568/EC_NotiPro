@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>{% if is_new %}Nueva area{% else %}Editar area{% endif %}</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+    <div class="row">
+      <label>Nombre<input type="text" name="nombre" value="{{ form_data.nombre }}" required></label>
+      <label>Estado
+        <select name="estado">
+          <option value="Activa" {% if form_data.estado == "Activa" %}selected{% endif %}>Activa</option>
+          <option value="Inactiva" {% if form_data.estado == "Inactiva" %}selected{% endif %}>Inactiva</option>
+        </select>
+      </label>
+    </div>
+    <label>Descripcion<textarea name="descripcion">{{ form_data.descripcion or '' }}</textarea></label>
+    <div class="actions" style="margin-top: 1rem;">
+      <button type="submit">{% if is_new %}Crear area{% else %}Guardar cambios{% endif %}</button>
+      <a href="/web/admin/areas">Volver</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+

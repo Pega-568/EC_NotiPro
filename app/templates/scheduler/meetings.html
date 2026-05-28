@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Reuniones</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Titulo</th><th>Fecha</th><th>Zona</th><th>Estado</th></tr></thead>
+    <tbody>
+      {% for meeting in meetings %}
+      <tr><td>{{ meeting.id }}</td><td>{{ meeting.titulo }}</td><td>{{ meeting.fecha }} {{ meeting.hora_inicio }}</td><td>{{ meeting.zona.nombre }}</td><td>{{ meeting.estado }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

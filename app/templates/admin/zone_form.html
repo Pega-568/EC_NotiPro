@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>{% if is_new %}Nueva zona{% else %}Editar zona{% endif %}</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+    <div class="row">
+      <label>Nombre<input type="text" name="nombre" value="{{ form_data.nombre }}" required></label>
+      <label>Ubicacion<input type="text" name="ubicacion" value="{{ form_data.ubicacion }}" required></label>
+      <label>Capacidad<input type="number" min="1" name="capacidad" value="{{ form_data.capacidad }}" required></label>
+      <label>Area asociada
+        <select name="area_id">
+          <option value="">Sin area</option>
+          {% for area in areas %}
+          <option value="{{ area.id }}" {% if form_data.area_id|string == area.id|string %}selected{% endif %}>{{ area.nombre }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Estado
+        <select name="estado">
+          <option value="Activa" {% if form_data.estado == "Activa" %}selected{% endif %}>Activa</option>
+          <option value="Inactiva" {% if form_data.estado == "Inactiva" %}selected{% endif %}>Inactiva</option>
+          <option value="En mantenimiento" {% if form_data.estado == "En mantenimiento" %}selected{% endif %}>En mantenimiento</option>
+        </select>
+      </label>
+      <label>Margen operativo<input type="number" min="0" name="margen_operativo_minutos" value="{{ form_data.margen_operativo_minutos }}" required></label>
+    </div>
+    <label>Descripcion<textarea name="descripcion">{{ form_data.descripcion or '' }}</textarea></label>
+    <div class="actions" style="margin-top: 1rem;">
+      <button type="submit">{% if is_new %}Crear zona{% else %}Guardar cambios{% endif %}</button>
+      <a href="/web/admin/zonas">Volver</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+

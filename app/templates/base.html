@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "Agenda de Reuniones" }}</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: #fffaf4;
+      --ink: #1f2933;
+      --accent: #8a3b12;
+      --accent-soft: #eed8c8;
+      --line: #d7c8b8;
+    }
+    body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: linear-gradient(140deg, #f4efe7, #e8ddd0); color: var(--ink); }
+    header, main { max-width: 1120px; margin: 0 auto; padding: 1rem; }
+    nav a { margin-right: 1rem; color: var(--accent); text-decoration: none; font-weight: 700; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.65rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    input, select, textarea, button { width: 100%; padding: 0.7rem; border-radius: 10px; border: 1px solid var(--line); box-sizing: border-box; }
+    button, .button-link { background: var(--accent); color: white; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
+    .badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+    .error { color: #8f1d1d; font-weight: 700; }
+    .success { color: #0d6832; font-weight: 700; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .inline-form { display: inline-block; margin: 0; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Agenda de Reuniones</h1>
+    {% if g.current_user %}
+    <nav>
+      <a href="/">Inicio</a>
+      {% if g.current_user.role.nombre == "Admin" %}
+      <a href="/web/admin">Dashboard</a>
+      <a href="/web/admin/calendario">Calendario</a>
+      <a href="/web/admin/usuarios">Usuarios</a>
+      <a href="/web/admin/areas">Areas</a>
+      <a href="/web/admin/zonas">Zonas de reunion</a>
+      <a href="/web/admin/reuniones">Reuniones</a>
+      <a href="/web/admin/logs">Logs</a>
+      <a href="/web/admin/configuracion">Configuracion</a>
+      {% elif g.current_user.role.nombre == "Agendador" %}
+      <a href="/scheduler">Dashboard</a>
+      <a href="/scheduler/usuarios">Mi area</a>
+      <a href="/scheduler/reuniones">Mis reuniones</a>
+      <a href="/scheduler/respuestas">Respuestas</a>
+      <a href="/scheduler/zonas">Zonas</a>
+      {% else %}
+      <a href="/mis-reuniones">Mis reuniones</a>
+      {% endif %}
+    </nav>
+    <form method="post" action="/logout" style="max-width: 180px; margin-top: 0.8rem;">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+      <button type="submit">Cerrar sesion</button>
+    </form>
+    {% endif %}
+  </header>
+  <main>
+    {% if success %}<p class="success">{{ success }}</p>{% endif %}
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Usuarios</h2>
+  <div class="actions" style="margin-bottom: 1rem;">
+    <a class="button-link" href="/web/admin/usuarios/nuevo">Crear usuario</a>
+  </div>
+  <table>
+    <thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Telefono</th><th>Rol</th><th>Area</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.id }}</td>
+        <td>{{ user.nombre }}</td>
+        <td>{{ user.correo }}</td>
+        <td>{{ user.telefono or "-" }}</td>
+        <td>{{ user.role.nombre }}</td>
+        <td>{{ user.area.nombre }}</td>
+        <td><span class="badge">{{ user.estado }}</span></td>
+        <td>
+          <div class="actions">
+            <a href="/web/admin/usuarios/{{ user.id }}/editar">Editar</a>
+            {% if user.estado == "Activo" %}
+            <form class="inline-form" method="post" action="/web/admin/usuarios/{{ user.id }}/desactivar">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+              <button type="submit">Desactivar</button>
+            </form>
+            {% else %}
+            <form class="inline-form" method="post" action="/web/admin/usuarios/{{ user.id }}/activar">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+              <button type="submit">Activar</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

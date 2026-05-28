@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>{% if is_new %}Nueva reunion{% else %}Editar reunion{% endif %}</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+    <div class="row">
+      <label>Titulo<input type="text" name="titulo" value="{{ form_data.titulo }}" required></label>
+      <label>Fecha<input type="date" name="fecha" value="{{ form_data.fecha }}" required></label>
+      <label>Hora inicio<input type="time" name="hora_inicio" value="{{ form_data.hora_inicio }}" required></label>
+      <label>Hora fin<input type="time" name="hora_fin" value="{{ form_data.hora_fin }}" required></label>
+      <label>Zona
+        <select name="zona_id" required>
+          <option value="">Seleccione</option>
+          {% for zone in zones %}
+          <option value="{{ zone.id }}" {% if form_data.zona_id|string == zone.id|string %}selected{% endif %}>{{ zone.nombre }} ({{ zone.estado }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Prioridad
+        <select name="prioridad">
+          <option value="Baja" {% if form_data.prioridad == "Baja" %}selected{% endif %}>Baja</option>
+          <option value="Media" {% if form_data.prioridad == "Media" %}selected{% endif %}>Media</option>
+          <option value="Alta" {% if form_data.prioridad == "Alta" %}selected{% endif %}>Alta</option>
+        </select>
+      </label>
+    </div>
+    <label>Motivo<textarea name="motivo" required>{{ form_data.motivo }}</textarea></label>
+    <section class="panel" style="margin-top: 1rem; padding: 1rem; background: #fbf6f0;">
+      <h3>Selector de participantes</h3>
+      <div class="row">
+        <label>Area
+          <select id="participant-area-filter">
+            <option value="">Seleccione area</option>
+            {% for area in searchable_areas %}
+            <option value="{{ area.id }}">{{ area.nombre }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Buscar persona
+          <input type="text" id="participant-search" placeholder="Nombre o correo">
+        </label>
+      </div>
+      <div class="actions" style="margin-top: 0.75rem;">
+        <button type="button" id="participant-search-button">Buscar</button>
+      </div>
+      <div style="margin-top: 1rem;">
+        <strong>Resultados</strong>
+        <div id="participant-results" class="panel" style="margin-top: 0.5rem;"></div>
+      </div>
+      <div style="margin-top: 1rem;">
+        <strong>Participantes seleccionados</strong>
+        <div id="selected-participants" class="actions" style="margin-top: 0.5rem;">
+          {% for participant in selected_participants %}
+          <span class="badge" data-selected-id="{{ participant.id }}">
+            {{ participant.nombre }} - {{ participant.area }}
+            <button type="button" data-remove-id="{{ participant.id }}" style="width:auto; margin-left:0.5rem;">Quitar</button>
+          </span>
+          <input type="hidden" name="participant_ids" value="{{ participant.id }}">
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    <div class="actions" style="margin-top: 1rem;">
+      <button type="submit">{% if is_new %}Crear reunion{% else %}Guardar cambios{% endif %}</button>
+      <a href="/web/admin/reuniones">Volver</a>
+    </div>
+  </form>
+</section>
+<script>
+(() => {
+  const areaSelect = document.getElementById("participant-area-filter");
+  const searchInput = document.getElementById("participant-search");
+  const searchButton = document.getElementById("participant-search-button");
+  const resultsContainer = document.getElementById("participant-results");
+  const selectedContainer = document.getElementById("selected-participants");
+  const lockedAreaId = {{ user_search_locked_area_id|tojson }};
+  const selectedIds = new Set(Array.from(document.querySelectorAll('input[name="participant_ids"]')).map((input) => input.value));
+
+  if (lockedAreaId) {
+    areaSelect.value = String(lockedAreaId);
+    areaSelect.disabled = true;
+  }
+
+  function renderSelectedCard(user) {
+    if (selectedIds.has(String(user.id))) return;
+    selectedIds.add(String(user.id));
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.dataset.selectedId = String(user.id);
+    badge.innerHTML = `${user.nombre} - ${user.area} <button type="button" data-remove-id="${user.id}" style="width:auto; margin-left:0.5rem;">Quitar</button>`;
+    const hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.name = "participant_ids";
+    hidden.value = String(user.id);
+    selectedContainer.appendChild(badge);
+    selectedContainer.appendChild(hidden);
+  }
+
+  function removeSelected(id) {
+    selectedIds.delete(String(id));
+    const badge = selectedContainer.querySelector(`[data-selected-id="${id}"]`);
+    if (badge) badge.remove();
+    const hidden = Array.from(selectedContainer.querySelectorAll('input[name="participant_ids"]')).find((input) => input.value === String(id));
+    if (hidden) hidden.remove();
+  }
+
+  selectedContainer.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.dataset.removeId) {
+      removeSelected(target.dataset.removeId);
+    }
+  });
+
+  async function searchUsers() {
+    const areaId = lockedAreaId || areaSelect.value;
+    const q = searchInput.value.trim();
+    if (!areaId) {
+      resultsContainer.innerHTML = "<p class='error'>Seleccione un area para buscar.</p>";
+      return;
+    }
+    const response = await fetch(`/api/usuarios/buscar?area_id=${encodeURIComponent(areaId)}&q=${encodeURIComponent(q)}`, {
+      credentials: "same-origin"
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      resultsContainer.innerHTML = `<p class='error'>${payload.message || "No se pudo buscar usuarios."}</p>`;
+      return;
+    }
+    if (!payload.length) {
+      resultsContainer.innerHTML = "<p>No se encontraron usuarios.</p>";
+      return;
+    }
+    resultsContainer.innerHTML = "";
+    payload.forEach((user) => {
+      const row = document.createElement("div");
+      row.style.padding = "0.5rem 0";
+      row.style.borderBottom = "1px solid #d7c8b8";
+      row.innerHTML = `<strong>${user.nombre}</strong> - ${user.area} - ${user.correo} <button type="button" data-add-id="${user.id}" style="width:auto; margin-left:0.5rem;">Agregar</button>`;
+      row.querySelector("button").addEventListener("click", () => renderSelectedCard(user));
+      resultsContainer.appendChild(row);
+    });
+  }
+
+  searchButton.addEventListener("click", searchUsers);
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchUsers();
+    }
+  });
+})();
+</script>
+{% endblock %}

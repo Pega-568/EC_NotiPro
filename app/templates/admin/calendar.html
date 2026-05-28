@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Calendario operativo</h2>
+  <form method="get" class="row">
+    <label>Vista
+      <select name="view">
+        <option value="month" {% if view_mode == "month" %}selected{% endif %}>Mes</option>
+        <option value="week" {% if view_mode == "week" %}selected{% endif %}>Semana</option>
+        <option value="day" {% if view_mode == "day" %}selected{% endif %}>Dia</option>
+        <option value="list" {% if view_mode == "list" %}selected{% endif %}>Lista</option>
+        <option value="zone" {% if view_mode == "zone" %}selected{% endif %}>Por zona</option>
+        <option value="area" {% if view_mode == "area" %}selected{% endif %}>Por area</option>
+      </select>
+    </label>
+    <label>Fecha de anclaje
+      <input type="date" name="date" value="{{ anchor.isoformat() }}">
+    </label>
+    <label>Area
+      <select name="area_id">
+        <option value="">Todas</option>
+        {% for area in areas %}
+        <option value="{{ area.id }}" {% if area_id == area.id %}selected{% endif %}>{{ area.nombre }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Zona
+      <select name="zone_id">
+        <option value="">Todas</option>
+        {% for zone in zones %}
+        <option value="{{ zone.id }}" {% if zone_id == zone.id %}selected{% endif %}>{{ zone.nombre }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>&nbsp;
+      <button type="submit">Aplicar filtros</button>
+    </label>
+  </form>
+</section>
+
+{% if view_mode == "month" %}
+<section class="panel" style="margin-top: 1rem;">
+  <h2>{{ anchor.strftime('%B %Y') }}</h2>
+  <div class="grid" style="grid-template-columns: repeat(7, 1fr);">
+    {% for label in ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'] %}
+    <article class="panel" style="padding:0.5rem; text-align:center;"><strong>{{ label }}</strong></article>
+    {% endfor %}
+    {% for week in month_matrix %}
+      {% for day in week %}
+      <article class="panel" style="min-height: 140px; padding:0.6rem;">
+        {% if day %}
+        {% set day_key = anchor.replace(day=day).isoformat() %}
+        <div class="actions" style="justify-content: space-between;">
+          <strong>{{ day }}</strong>
+          <a href="/web/admin/reuniones/nueva?fecha={{ day_key }}">+</a>
+        </div>
+        {% for row in meetings_by_day.get(day_key, [])[:4] %}
+        <div style="margin-top:0.45rem; border-left:4px solid #003091; padding-left:0.4rem;">
+          <div><strong>{{ row.meeting.hora_inicio.strftime('%H:%M') }}</strong> {{ row.meeting.titulo }}</div>
+          <div>{{ row.meeting.zona.nombre }}</div>
+          <div>{{ row.data.estado_visual }} · {{ row.response_label }}</div>
+          <a href="/web/admin/reuniones/{{ row.meeting.id }}">Ver</a>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </article>
+      {% endfor %}
+    {% endfor %}
+  </div>
+</section>
+{% elif view_mode in ["week", "day", "list"] %}
+<section class="panel" style="margin-top: 1rem;">
+  <h2>Reuniones del rango {{ start_date }} al {{ end_date }}</h2>
+  <table>
+    <thead><tr><th>Fecha</th><th>Hora</th><th>Titulo</th><th>Zona</th><th>Estado</th><th>Respuestas</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for meeting in meetings %}
+      {% set data = meeting and namespace(v=meeting) %}
+      {% set serialized = serialize_meeting(meeting) if serialize_meeting is defined else none %}
+      <tr>
+        <td>{{ meeting.fecha }}</td>
+        <td>{{ meeting.hora_inicio.strftime('%H:%M') }} - {{ meeting.hora_fin.strftime('%H:%M') }}</td>
+        <td>{{ meeting.titulo }}</td>
+        <td>{{ meeting.zona.nombre }}</td>
+        <td>{{ serialized.estado_visual if serialized else meeting.estado }}</td>
+        <td>{{ serialized.resumen_respuestas.aceptadas if serialized else 0 }}/{{ serialized.resumen_respuestas.total if serialized else 0 }}</td>
+        <td>
+          <div class="actions">
+            <a href="/web/admin/reuniones/{{ meeting.id }}">Detalle</a>
+            <a href="/web/admin/reuniones/{{ meeting.id }}/editar">Editar</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="panel" style="margin-top: 1rem;">
+  <h2>Vista agrupada del {{ start_date }} al {{ end_date }}</h2>
+  {% for group in grouped_rows %}
+  <article class="panel" style="margin-top: 1rem;">
+    <h3>{{ group.label }}</h3>
+    {% if group.rows %}
+    <table>
+      <thead><tr><th>Fecha</th><th>Hora</th><th>Titulo</th><th>Estado</th><th>Respuestas</th><th>Acciones</th></tr></thead>
+      <tbody>
+        {% for row in group.rows %}
+        <tr>
+          <td>{{ row.meeting.fecha }}</td>
+          <td>{{ row.meeting.hora_inicio.strftime('%H:%M') }} - {{ row.meeting.hora_fin.strftime('%H:%M') }}</td>
+          <td>{{ row.meeting.titulo }}</td>
+          <td>{{ row.data.estado_visual }}</td>
+          <td>{{ row.response_label }}</td>
+          <td>
+            <div class="actions">
+              <a href="/web/admin/reuniones/{{ row.meeting.id }}">Detalle</a>
+              <a href="/web/admin/reuniones/{{ row.meeting.id }}/editar">Editar</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No hay reuniones para este grupo.</p>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

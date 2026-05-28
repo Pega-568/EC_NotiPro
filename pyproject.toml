@@ -1,0 +1,27 @@
+[project]
+name = "agenda-reuniones"
+version = "0.1.0"
+description = "Sistema web y API para gestion segura de reuniones por areas."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "Flask>=3.0,<4.0",
+  "SQLAlchemy>=2.0,<3.0",
+  "Flask-SQLAlchemy>=3.1,<4.0",
+  "alembic>=1.13,<2.0",
+  "argon2-cffi>=23.1,<24.0",
+  "python-dotenv>=1.0,<2.0",
+  "email-validator>=2.1,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2,<9.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]
+

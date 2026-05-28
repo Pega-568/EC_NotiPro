@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Areas</h2>
+  <div class="actions" style="margin-bottom: 1rem;">
+    <a class="button-link" href="/web/admin/areas/nueva">Crear area</a>
+  </div>
+  <table>
+    <thead><tr><th>ID</th><th>Nombre</th><th>Descripcion</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for area in areas %}
+      <tr>
+        <td>{{ area.id }}</td>
+        <td>{{ area.nombre }}</td>
+        <td>{{ area.descripcion or "-" }}</td>
+        <td>{{ area.estado }}</td>
+        <td>
+          <div class="actions">
+            <a href="/web/admin/areas/{{ area.id }}/editar">Editar</a>
+            {% if area.estado == "Activa" %}
+            <form class="inline-form" method="post" action="/web/admin/areas/{{ area.id }}/desactivar">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+              <button type="submit">Desactivar</button>
+            </form>
+            {% else %}
+            <form class="inline-form" method="post" action="/web/admin/areas/{{ area.id }}/activar">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+              <button type="submit">Activar</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

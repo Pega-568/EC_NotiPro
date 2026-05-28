@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Reuniones</h2>
+  <div class="actions" style="margin-bottom: 1rem;">
+    <a class="button-link" href="/web/admin/reuniones/nueva">Crear reunion</a>
+  </div>
+  <table>
+    <thead><tr><th>ID</th><th>Titulo</th><th>Fecha</th><th>Zona</th><th>Estado</th><th>Participantes</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for meeting in meetings %}
+      {% set item = serialize_meeting(meeting) %}
+      <tr>
+        <td>{{ item.id }}</td>
+        <td>{{ item.titulo }}</td>
+        <td>{{ item.fecha }} {{ item.hora_inicio }}-{{ item.hora_fin }}</td>
+        <td>{{ item.zona_nombre }}</td>
+        <td>{{ item.estado }}</td>
+        <td>
+          {% for participant in item.participantes %}
+          <div>{{ participant.nombre }} ({{ participant.estado_respuesta }})</div>
+          {% endfor %}
+        </td>
+        <td>
+          <div class="actions">
+            <a href="/web/admin/reuniones/{{ item.id }}">Detalle</a>
+            <a href="/web/admin/reuniones/{{ item.id }}/editar">Editar</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

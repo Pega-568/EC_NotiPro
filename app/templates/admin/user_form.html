@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>{% if is_new %}Nuevo usuario{% else %}Editar usuario{% endif %}</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+    <div class="row">
+      <label>Nombre<input type="text" name="nombre" value="{{ form_data.nombre }}" required></label>
+      <label>Correo<input type="email" name="correo" value="{{ form_data.correo }}" required></label>
+      <label>Telefono<input type="text" name="telefono" value="{{ form_data.telefono or '' }}"></label>
+      <label>Rol
+        <select name="role_id" required>
+          <option value="">Seleccione</option>
+          {% for role in roles %}
+          <option value="{{ role.id }}" {% if form_data.role_id|string == role.id|string %}selected{% endif %}>{{ role.nombre }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Area
+        <select name="area_id" required>
+          <option value="">Seleccione</option>
+          {% for area in areas %}
+          <option value="{{ area.id }}" {% if form_data.area_id|string == area.id|string %}selected{% endif %}>{{ area.nombre }} ({{ area.estado }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Estado
+        <select name="estado">
+          <option value="Activo" {% if form_data.estado == "Activo" %}selected{% endif %}>Activo</option>
+          <option value="Inactivo" {% if form_data.estado == "Inactivo" %}selected{% endif %}>Inactivo</option>
+        </select>
+      </label>
+      <label>Contraseña temporal
+        <input type="text" name="password_temporal" value="{{ form_data.password_temporal }}">
+      </label>
+    </div>
+    <div class="actions" style="margin-top: 1rem;">
+      <button type="submit">{% if is_new %}Crear usuario{% else %}Guardar cambios{% endif %}</button>
+      <a href="/web/admin/usuarios">Volver</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
