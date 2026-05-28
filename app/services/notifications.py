@@ -410,17 +410,15 @@ def _send_push(device_token: str, event_type: str, payload: dict) -> dict:
         )
         
         messaging.send(message)
-        return {"result": "exitoso", "detail": "fcm_sent"}
+        return {"result": "enviado", "detail": "fcm_sent"}
     except messaging.UnregisteredError:
         device = DeviceToken.query.filter_by(token=device_token).first()
         if device:
             device.estado = "Inactivo"
             db.session.add(device)
-            # The caller handles db commit for logging, but we can safely commit here
-            db.session.commit()
-        return {"result": "fallido", "detail": "token_invalido"}
+        return {"result": "token_invalido", "detail": "firebase_unregistered"}
     except Exception as exc:
-        return {"result": "fallido", "detail": "error_externo"}
+        return {"result": "fallido", "detail": "firebase_error"}
 
 
 def _build_push_message(event_type: str, payload: dict) -> tuple[str, str, str]:

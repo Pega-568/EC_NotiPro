@@ -35,7 +35,7 @@ def test_send_push_success(mock_send, mock_certificate, mock_firebase_admin, app
         
         result = _send_push("fake-token", "meeting_created", {"meeting_id": 1})
         
-        assert result["result"] == "exitoso"
+        assert result["result"] == "enviado"
         assert result["detail"] == "fcm_sent"
         mock_send.assert_called_once()
         
@@ -65,8 +65,8 @@ def test_send_push_invalid_token(mock_send, mock_certificate, mock_firebase_admi
         
         result = _send_push("invalid-token", "meeting_created", {"meeting_id": 1})
         
-        assert result["result"] == "fallido"
-        assert result["detail"] == "token_invalido"
+        assert result["result"] == "token_invalido"
+        assert result["detail"] == "firebase_unregistered"
         
         # Verificar que se actualizó el token
         updated_dt = db.session.get(DeviceToken, dt.id)
@@ -88,4 +88,4 @@ def test_send_push_firebase_error(mock_send, mock_certificate, mock_firebase_adm
         result = _send_push("fake-token", "meeting_created", {"meeting_id": 1})
         
         assert result["result"] == "fallido"
-        assert result["detail"] == "error_externo"
+        assert result["detail"] == "firebase_error"
