@@ -60,3 +60,11 @@ android/.idea/
 # Temporary files
 *.tmp
 .temp/
+
+# Firebase & Secrets
+android/app/google-services.json
+*.env
+firebase-service-account*.json
+*service-account*.json
+secrets/
+credentials/

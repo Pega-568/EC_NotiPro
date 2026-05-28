@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from urllib import error, request
 
+import firebase_admin
+from firebase_admin import credentials, messaging
 from flask import current_app
 
 from app.extensions import db
@@ -378,35 +380,61 @@ def _meeting_payload(meeting: Reunion, recipients: list[Usuario], extra: dict | 
 
 
 def _send_push(device_token: str, event_type: str, payload: dict) -> dict:
-    if not current_app.config.get("FCM_ENABLED") or not current_app.config.get("FCM_SERVICE_ACCOUNT_PATH"):
-        return {"result": "fallido", "detail": "proveedor_push_no_configurado"}
+    if not current_app.config.get("FCM_ENABLED"):
+        return {"result": "fallido", "detail": "fcm_disabled"}
         
-    # TODO: Implementar FCM HTTP v1 (Firebase Admin SDK)
-    # Reemplaza la logica Legacy que utilizaba Server Key.
-    return {"result": "fallido", "detail": "fcm_http_v1_not_implemented"}
+    cert_path = current_app.config.get("FCM_SERVICE_ACCOUNT_PATH")
+    if not cert_path:
+        return {"result": "fallido", "detail": "fcm_http_v1_not_configured"}
+        
+    try:
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(cert_path)
+            firebase_admin.initialize_app(cred)
+            
+        title, body, channel_id = _build_push_message(event_type, payload)
+        
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            data={
+                "type": event_type,
+                "meeting_id": str(payload.get("meeting_id", "")),
+            },
+            token=device_token,
+            android=messaging.AndroidConfig(
+                notification=messaging.AndroidNotification(channel_id=channel_id)
+            )
+        )
+        
+        messaging.send(message)
+        return {"result": "exitoso", "detail": "fcm_sent"}
+    except messaging.UnregisteredError:
+        device = DeviceToken.query.filter_by(token=device_token).first()
+        if device:
+            device.estado = "Inactivo"
+            db.session.add(device)
+            # The caller handles db commit for logging, but we can safely commit here
+            db.session.commit()
+        return {"result": "fallido", "detail": "token_invalido"}
+    except Exception as exc:
+        return {"result": "fallido", "detail": "error_externo"}
 
 
 def _build_push_message(event_type: str, payload: dict) -> tuple[str, str, str]:
-    title = payload.get("title", "Reunion institucional")
-    date_text = payload.get("date", "")
-    time_text = f"{payload.get('start', '')} - {payload.get('end', '')}".strip()
-    zone = payload.get("zone", "")
-    responder = payload.get("responder_nombre", "")
-    response_status = payload.get("response_status", "")
+    title = "EC_NotiPro"
+    body = "Nueva actualización de reunión. Abra la app para revisar los detalles."
 
-    if event_type == "meeting_created":
-        return title, f"Nueva reunion {date_text} {time_text} en {zone}.", "reuniones"
-    if event_type == "meeting_updated":
-        return title, f"Se actualizo la reunion {date_text} {time_text} en {zone}.", "reuniones"
     if event_type == "meeting_canceled":
-        return title, f"La reunion programada para {date_text} fue cancelada.", "urgentes"
-    if event_type == "meeting_response":
-        return title, f"{responder} marco la reunion como {response_status}.", "reuniones"
-    if event_type == "reminder_30":
-        return title, "Recordatorio: la reunion inicia en 30 minutos.", "recordatorios"
-    if event_type == "reminder_10":
-        return title, "Recordatorio: la reunion inicia en 10 minutos.", "urgentes"
-    return title, "Tiene una actualizacion de reunion.", "reuniones"
+        channel_id = "urgentes"
+    elif event_type in ("reminder_30", "reminder_10"):
+        channel_id = "recordatorios" if event_type == "reminder_30" else "urgentes"
+    else:
+        channel_id = "reuniones"
+        
+    return title, body, channel_id
 
 
 def _build_email_message(event_type: str, payload: dict, recipient: Usuario) -> tuple[str, str]:
