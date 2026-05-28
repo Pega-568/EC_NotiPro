@@ -245,7 +245,7 @@ private class FriendlyException(
 internal class SessionStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("agenda_mobile", MODE_PRIVATE)
 
-    fun baseUrl(): String = prefs.getString("base_url", "http://192.168.0.139:5000") ?: "http://192.168.0.139:5000"
+    fun baseUrl(): String = prefs.getString("base_url", "http://172.16.135.69:5000") ?: "http://172.16.135.69:5000"
     fun saveBaseUrl(value: String) { prefs.edit().putString("base_url", value.trim().removeSuffix("/")).apply() }
     fun token(): String? = prefs.getString("access_token", null)
     fun saveToken(value: String) { prefs.edit().putString("access_token", value).apply() }
@@ -349,7 +349,7 @@ private data class AppUiState(
     val selectedCalendarDay: LocalDate = LocalDate.now(),
     val calendarMonth: YearMonth = YearMonth.now(),
     val calendarMode: CalendarMode = CalendarMode.MONTH,
-    val baseUrl: String = "http://192.168.0.139:5000",
+    val baseUrl: String = "http://172.16.135.69:5000",
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val lastTechnicalError: String? = null,
@@ -628,7 +628,7 @@ private fun LoginScreen(uiState: AppUiState, viewModel: AppViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        "Ejemplos: http://10.0.2.2:5000 | http://192.168.0.139:5000 | https://tu-ngrok.ngrok-free.app",
+                        "Ejemplos: http://10.0.2.2:5000 | http://172.16.135.69:5000 | https://tu-ngrok.ngrok-free.app",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
