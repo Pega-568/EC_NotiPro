@@ -1,3 +1,5 @@
+from flask import current_app
+
 from app.extensions import db
 from app.constants import ROLE_ADMIN, ROLE_AGENDADOR, ROLE_COLABORADOR, ROLE_SECRETARIA
 from app.models import Area, Configuracion, Role, Usuario, ZonaReunion
@@ -17,7 +19,7 @@ DEFAULT_CONFIG = {
 }
 
 
-def seed_defaults() -> None:
+def seed_base_defaults() -> dict[str, object]:
     role_aliases = {
         "Admin": ROLE_ADMIN,
         "Agendador": ROLE_AGENDADOR,
@@ -52,41 +54,56 @@ def seed_defaults() -> None:
     agendador_role = Role.query.filter_by(nombre=ROLE_AGENDADOR).first()
     user_role = Role.query.filter_by(nombre=ROLE_COLABORADOR).first()
 
+    return {
+        "areas": areas,
+        "roles": {
+            "admin": admin_role,
+            "secretaria": scheduler_role,
+            "agendador": agendador_role,
+            "colaborador": user_role,
+        },
+    }
+
+
+def seed_demo_users(seed_context: dict[str, object]) -> None:
+    areas = seed_context["areas"]
+    roles = seed_context["roles"]
+
     users = [
-        ("Administrador Principal", "admin@empresa.local", "Admin123!", admin_role.id, areas["Contabilidad"].id),
+        ("Administrador Principal", "admin@empresa.local", "Admin123!", roles["admin"].id, areas["Contabilidad"].id),
         (
             "Secretaria General",
             "secretaria.general@empresa.local",
             "Agenda123!",
-            scheduler_role.id,
+            roles["secretaria"].id,
             areas["Contabilidad"].id,
         ),
         (
             "Agendador Contabilidad",
             "agendador.contabilidad@empresa.local",
             "Agenda123!",
-            agendador_role.id,
+            roles["agendador"].id,
             areas["Contabilidad"].id,
         ),
         (
             "Colaborador 1 Contabilidad",
             "usuario1.contabilidad@empresa.local",
             "Usuario123!",
-            user_role.id,
+            roles["colaborador"].id,
             areas["Contabilidad"].id,
         ),
         (
             "Colaborador 2 Contabilidad",
             "usuario2.contabilidad@empresa.local",
             "Usuario123!",
-            user_role.id,
+            roles["colaborador"].id,
             areas["Contabilidad"].id,
         ),
         (
             "Colaborador 1 Mercado",
             "usuario1.mercado@empresa.local",
             "Usuario123!",
-            user_role.id,
+            roles["colaborador"].id,
             areas["Mercado Privado"].id,
         ),
     ]
@@ -103,10 +120,21 @@ def seed_defaults() -> None:
                 )
             )
 
+
+def seed_defaults() -> None:
+    seed_context = seed_base_defaults()
+    app_env = current_app.config.get("APP_ENV", "development")
+    allow_demo_seed = current_app.config.get("ALLOW_DEMO_SEED", False)
+    if app_env == "production":
+        db.session.commit()
+        return
+    if allow_demo_seed or app_env in {"development", "testing", "staging"}:
+        seed_demo_users(seed_context)
+
     zones = [
         ("Sala Principal", "Piso 1", 20, None, "Activa", 5),
-        ("Sala Contabilidad", "Piso 2", 8, areas["Contabilidad"].id, "Activa", 5),
-        ("Sala Administracion", "Piso 3", 10, areas["Administracion"].id, "Activa", 5),
+        ("Sala Contabilidad", "Piso 2", 8, seed_context["areas"]["Contabilidad"].id, "Activa", 5),
+        ("Sala Administracion", "Piso 3", 10, seed_context["areas"]["Administracion"].id, "Activa", 5),
     ]
     for nombre, ubicacion, capacidad, area_id, estado, margen in zones:
         if not ZonaReunion.query.filter_by(nombre=nombre).first():

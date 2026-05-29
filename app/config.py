@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,6 +38,12 @@ class Config:
     MAIL_REPLY_TO = os.getenv("MAIL_REPLY_TO", MAIL_FROM).strip()
     MAIL_SUBJECT_PREFIX = os.getenv("MAIL_SUBJECT_PREFIX", "[Ecuamatriz]").strip()
     INTERNAL_BASE_URL = os.getenv("INTERNAL_BASE_URL", "http://127.0.0.1:5000").strip()
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+    LOG_FILE = os.getenv("LOG_FILE", "").strip()
+    ALLOW_DEMO_SEED = os.getenv("ALLOW_DEMO_SEED", "false").lower() == "true"
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+    ADMIN_NAME = os.getenv("ADMIN_NAME", "").strip()
     BACKGROUND_DISPATCH_ENABLED = os.getenv("BACKGROUND_DISPATCH_ENABLED", "false").lower() == "true"
     BACKGROUND_DISPATCH_INTERVAL_SECONDS = int(
         os.getenv("BACKGROUND_DISPATCH_INTERVAL_SECONDS", "30")
@@ -45,14 +52,28 @@ class Config:
     @classmethod
     def validate_runtime_or_raise(cls, debug_mode: str) -> None:
         if cls.APP_ENV in ("production", "staging"):
-            if cls.SECRET_KEY == "change-me":
+            secret_key = (cls.SECRET_KEY or "").strip()
+            if not secret_key or secret_key in {"change-me", "change-me-in-production"}:
                 raise RuntimeError("Insecure SECRET_KEY for production.")
-            if "sqlite" in cls.SQLALCHEMY_DATABASE_URI:
+            if "sqlite" in (cls.SQLALCHEMY_DATABASE_URI or "").lower():
                 raise RuntimeError("SQLite cannot be used in production.")
             if not cls.SESSION_COOKIE_SECURE:
                 raise RuntimeError("SESSION_COOKIE_SECURE must be True in production.")
-            if "127.0.0.1" in cls.INTERNAL_BASE_URL or "localhost" in cls.INTERNAL_BASE_URL:
+            internal_base_url = cls.INTERNAL_BASE_URL.lower()
+            if "127.0.0.1" in internal_base_url or "localhost" in internal_base_url:
                 raise RuntimeError("INTERNAL_BASE_URL must not be local in production.")
+            if not cls.APP_ALLOWED_ORIGINS:
+                raise RuntimeError("APP_ALLOWED_ORIGINS must not be empty in production.")
+            lowered_origins = [origin.lower() for origin in cls.APP_ALLOWED_ORIGINS]
+            if any("127.0.0.1" in origin or "localhost" in origin for origin in lowered_origins):
+                raise RuntimeError("APP_ALLOWED_ORIGINS must not contain local hosts in production.")
+            if cls.FCM_ENABLED:
+                if not cls.FCM_SERVICE_ACCOUNT_PATH:
+                    raise RuntimeError("FCM_SERVICE_ACCOUNT_PATH is required when FCM_ENABLED=true.")
+                if not Path(cls.FCM_SERVICE_ACCOUNT_PATH).is_file():
+                    raise RuntimeError("FCM_SERVICE_ACCOUNT_PATH does not exist.")
+            if cls.ALLOW_DEMO_SEED:
+                raise RuntimeError("ALLOW_DEMO_SEED must be False in production.")
             if debug_mode.lower() == "true":
                 raise RuntimeError("Debug mode must be disabled in production.")
 
