@@ -18,6 +18,12 @@ DEFAULT_CONFIG = {
     "correo_formal_automatico": ("true", "Activa los correos formales automaticos."),
 }
 
+DEFAULT_ZONES = [
+    ("Sala Principal", "Piso 1", 20, None, "Activa", 5),
+    ("Sala Contabilidad", "Piso 2", 8, "Contabilidad", "Activa", 5),
+    ("Sala Administracion", "Piso 3", 10, "Administracion", "Activa", 5),
+]
+
 
 def seed_base_defaults() -> dict[str, object]:
     role_aliases = {
@@ -121,22 +127,10 @@ def seed_demo_users(seed_context: dict[str, object]) -> None:
             )
 
 
-def seed_defaults() -> None:
-    seed_context = seed_base_defaults()
-    app_env = current_app.config.get("APP_ENV", "development")
-    allow_demo_seed = current_app.config.get("ALLOW_DEMO_SEED", False)
-    if app_env == "production":
-        db.session.commit()
-        return
-    if allow_demo_seed or app_env in {"development", "testing", "staging"}:
-        seed_demo_users(seed_context)
-
-    zones = [
-        ("Sala Principal", "Piso 1", 20, None, "Activa", 5),
-        ("Sala Contabilidad", "Piso 2", 8, seed_context["areas"]["Contabilidad"].id, "Activa", 5),
-        ("Sala Administracion", "Piso 3", 10, seed_context["areas"]["Administracion"].id, "Activa", 5),
-    ]
-    for nombre, ubicacion, capacidad, area_id, estado, margen in zones:
+def seed_base_zones(seed_context: dict[str, object]) -> None:
+    areas = seed_context["areas"]
+    for nombre, ubicacion, capacidad, area_name, estado, margen in DEFAULT_ZONES:
+        area_id = areas[area_name].id if area_name else None
         if not ZonaReunion.query.filter_by(nombre=nombre).first():
             db.session.add(
                 ZonaReunion(
@@ -148,4 +142,13 @@ def seed_defaults() -> None:
                     margen_operativo_minutos=margen,
                 )
             )
+
+
+def seed_defaults() -> None:
+    seed_context = seed_base_defaults()
+    app_env = current_app.config.get("APP_ENV", "development")
+    allow_demo_seed = current_app.config.get("ALLOW_DEMO_SEED", False)
+    seed_base_zones(seed_context)
+    if app_env != "production" and (allow_demo_seed or app_env in {"development", "testing", "staging"}):
+        seed_demo_users(seed_context)
     db.session.commit()

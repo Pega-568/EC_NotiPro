@@ -10,7 +10,7 @@ def test_health_ok(client):
         "status": "ok",
         "database": "ok",
         "fcm_configured": False,
-        "app_env": "development",
+        "app_env": "testing",
     }
     body = response.get_data(as_text=True)
     assert "DATABASE_URL" not in body
@@ -34,5 +34,5 @@ def test_health_db_failure_returns_503(client, monkeypatch):
         "status": "degraded",
         "database": "error",
         "fcm_configured": False,
-        "app_env": "development",
+        "app_env": "testing",
     }

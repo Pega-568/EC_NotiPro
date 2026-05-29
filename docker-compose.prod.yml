@@ -1,0 +1,13 @@
+services:
+  backend:
+    ports: []
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx_docker.conf.example:/etc/nginx/conf.d/default.conf:ro
