@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="/web/solicitudes" class="button-link secondary" style="align-self: flex-start; padding: 0.5rem 1rem; border-radius: 10px; margin-bottom: 1rem;">← Volver</a>
+
+<section class="panel" style="max-width: 800px; margin: 0 auto;">
+  <h2 style="color: var(--brand); margin-bottom: 1.5rem;">Solicitud de Nueva Reunión</h2>
+  
+  <form id="requestForm" method="post" action="/web/solicitudes/nueva">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+    
+    <div style="margin-bottom: 1.25rem;">
+      <label for="titulo" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Título de la Reunión *</label>
+      <input type="text" id="titulo" name="titulo" required placeholder="Ej. Alineación Semanal del Equipo" style="border-radius: 10px;">
+    </div>
+
+    <div style="margin-bottom: 1.25rem;">
+      <label for="motivo" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Motivo / Descripción *</label>
+      <textarea id="motivo" name="motivo" required placeholder="Detalla los temas a tratar o la justificación de la reunión..." style="border-radius: 10px; min-height: 80px;"></textarea>
+    </div>
+
+    <div class="row" style="margin-bottom: 1.25rem;">
+      <div>
+        <label for="fecha" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Fecha *</label>
+        <input type="date" id="fecha" name="fecha" required style="border-radius: 10px;">
+      </div>
+      <div>
+        <label for="hora_inicio" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Hora de Inicio *</label>
+        <input type="time" id="hora_inicio" name="hora_inicio" required style="border-radius: 10px;">
+      </div>
+      <div>
+        <label for="hora_fin" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Hora de Fin *</label>
+        <input type="time" id="hora_fin" name="hora_fin" required style="border-radius: 10px;">
+      </div>
+    </div>
+
+    <div style="margin-bottom: 1.25rem;">
+      <label for="prioridad" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Prioridad</label>
+      <select id="prioridad" name="prioridad" style="border-radius: 10px; width: 100%;">
+        <option value="Baja">Baja</option>
+        <option value="Media" selected>Media</option>
+        <option value="Alta">Alta</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <label for="zona_id" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Sala de Reunión *</label>
+      <select id="zona_id" name="zona_id" required style="border-radius: 10px; width: 100%;">
+        <option value="" disabled selected>Seleccione una sala (Debe definir fecha y hora primero)</option>
+        {% for zone in zones %}
+        <option value="{{ zone.id }}" data-original-name="{{ zone.nombre }}">{{ zone.nombre }} (Ubicación: {{ zone.ubicacion }}, Capacidad: {{ zone.capacidad }} personas)</option>
+        {% endfor %}
+      </select>
+      <small id="zoneHelp" class="muted" style="display: block; margin-top: 0.25rem;"></small>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <label style="display: block; font-weight: 700; margin-bottom: 0.6rem;">Participantes Convocados *</label>
+      <div id="availabilityNotice" style="display: none; padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem; background: var(--warning-soft); color: var(--warning); font-size: 0.9rem; font-weight: 700;">
+        ⚠️ Defina fecha y horario válidos para comprobar la disponibilidad de los participantes.
+      </div>
+      
+      <div id="participantsContainer" style="max-height: 300px; overflow-y: auto; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: #fafbfc;">
+        {% for user in users %}
+        <div class="participant-item" id="user-row-{{ user.id }}" style="padding: 0.4rem 0; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid #f1f5f9;">
+          <input type="checkbox" name="participant_ids" value="{{ user.id }}" id="chk-{{ user.id }}" style="width: auto; cursor: pointer;">
+          <label for="chk-{{ user.id }}" style="cursor: pointer; width: 100%; display: flex; justify-content: space-between; align-items: center;">
+            <span><strong>{{ user.nombre }}</strong> <span class="muted" style="font-size: 0.85rem;">({{ user.area.nombre }})</span></span>
+            <span class="status-label" style="font-size: 0.85rem; font-weight: 700;"></span>
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <label for="observacion_solicitante" style="display: block; font-weight: 700; margin-bottom: 0.4rem;">Notas u Observaciones Adicionales (Opcional)</label>
+      <textarea id="observacion_solicitante" name="observacion_solicitante" placeholder="Ej. Requerimos proyector, o justificación de urgencia..." style="border-radius: 10px; min-height: 60px;"></textarea>
+    </div>
+
+    <div class="actions" style="margin-top: 2rem;">
+      <button type="submit" style="padding: 0.8rem 2rem; border-radius: 12px; font-size: 1.05rem;">Enviar Solicitud</button>
+      <a href="/web/solicitudes" class="button-link secondary" style="padding: 0.8rem 2rem; border-radius: 12px; font-size: 1.05rem;">Cancelar</a>
+    </div>
+  </form>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const fechaInput = document.getElementById("fecha");
+  const horaInicioInput = document.getElementById("hora_inicio");
+  const horaFinInput = document.getElementById("hora_fin");
+  const zonaSelect = document.getElementById("zona_id");
+  const notice = document.getElementById("availabilityNotice");
+
+  // Set minimum date to today
+  const todayStr = new Date().toISOString().split("T")[0];
+  fechaInput.min = todayStr;
+
+  function updateAvailability() {
+    const fecha = fechaInput.value;
+    const hora_inicio = horaInicioInput.value;
+    const hora_fin = horaFinInput.value;
+
+    if (!fecha || !hora_inicio || !hora_fin) {
+      notice.style.display = "block";
+      notice.textContent = "⚠️ Defina fecha y horario válidos para comprobar la disponibilidad de los participantes.";
+      return;
+    }
+
+    if (hora_fin <= hora_inicio) {
+      notice.style.display = "block";
+      notice.textContent = "⚠️ La hora de fin debe ser mayor que la hora de inicio.";
+      return;
+    }
+
+    notice.style.display = "none";
+
+    const url = `/api/web/availability?fecha=${fecha}&hora_inicio=${hora_inicio}&hora_fin=${hora_fin}`;
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          notice.style.display = "block";
+          notice.textContent = `⚠️ Error al validar: ${data.error}`;
+          return;
+        }
+
+        // 1. Update Zones select
+        Array.from(zonaSelect.options).forEach(opt => {
+          if (opt.value === "") return;
+          const status = data.zonas.find(z => z.id == opt.value);
+          const origName = opt.getAttribute("data-original-name");
+          if (status) {
+            if (status.disponible) {
+              opt.disabled = false;
+              opt.textContent = `${origName} (Ubicación: ${status.ubicacion}, Capacidad: ${status.capacidad})`;
+              opt.style.color = "initial";
+            } else {
+              opt.disabled = true;
+              opt.textContent = `[Sala ocupada en ese horario] ${origName}`;
+              opt.style.color = "var(--danger)";
+            }
+          }
+        });
+
+        // 2. Update Participants list
+        const flatUsers = [];
+        Object.keys(data.usuarios_por_area).forEach(area => {
+          data.usuarios_por_area[area].forEach(u => {
+            flatUsers.push(u);
+          });
+        });
+
+        flatUsers.forEach(u => {
+          const row = document.getElementById(`user-row-${u.id}`);
+          const chk = document.getElementById(`chk-${u.id}`);
+          if (row && chk) {
+            const statusLabel = row.querySelector(".status-label");
+            if (u.disponible) {
+              chk.disabled = false;
+              row.style.opacity = "1";
+              row.style.background = "transparent";
+              statusLabel.textContent = "Disponible";
+              statusLabel.style.color = "var(--success)";
+            } else {
+              chk.disabled = true;
+              chk.checked = false;
+              row.style.opacity = "0.7";
+              row.style.background = "#fff3f3";
+              statusLabel.textContent = u.motivo;
+              statusLabel.style.color = "var(--danger)";
+            }
+          }
+        });
+      })
+      .catch(e => {
+        console.error("Error fetching availability:", e);
+      });
+  }
+
+  fechaInput.addEventListener("change", updateAvailability);
+  horaInicioInput.addEventListener("change", updateAvailability);
+  horaFinInput.addEventListener("change", updateAvailability);
+
+  // Initialize
+  updateAvailability();
+});
+</script>
+{% endblock %}

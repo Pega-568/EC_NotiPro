@@ -902,3 +902,205 @@ def scheduler_zones():
 def user_dashboard():
     meetings = Reunion.query.filter(Reunion.participantes.any(usuario_id=g.current_user.id)).all()
     return render_template("scheduler/meetings.html", meetings=meetings)
+
+
+@web_bp.get("/api/web/availability")
+@require_auth(api=True)
+def api_availability():
+    from flask import jsonify
+    fecha_str = request.args.get("fecha")
+    hora_inicio_str = request.args.get("hora_inicio")
+    hora_fin_str = request.args.get("hora_fin")
+    if not fecha_str or not hora_inicio_str or not hora_fin_str:
+        return jsonify({"error": "Faltan parametros fecha, hora_inicio, hora_fin"}), 400
+    try:
+        from app.services.meeting_requests import check_availability
+        import datetime
+        fecha = datetime.date.fromisoformat(fecha_str)
+        hora_inicio = datetime.datetime.strptime(hora_inicio_str, "%H:%M").time()
+        hora_fin = datetime.datetime.strptime(hora_fin_str, "%H:%M").time()
+        data = check_availability(fecha, hora_inicio, hora_fin)
+        
+        grouped_users = {}
+        for u in data["usuarios"]:
+            grouped_users.setdefault(u["area_nombre"], []).append({
+                "id": u["id"],
+                "nombre": u["nombre"],
+                "correo": u["correo"],
+                "disponible": u["disponible"],
+                "motivo": u["motivo"]
+            })
+        
+        return jsonify({
+            "fecha": data["fecha"],
+            "hora_inicio": data["hora_inicio"],
+            "hora_fin": data["hora_fin"],
+            "zonas": data["zonas"],
+            "usuarios_por_area": grouped_users
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@web_bp.get("/web/solicitudes")
+@require_auth(api=False)
+def solicitudes_list():
+    from app.models import ReunionSolicitud
+    actor = g.current_user
+    if actor.role.nombre in (ROLE_SECRETARIA, ROLE_ADMIN):
+        return redirect(url_for("web.secretaria_solicitudes"))
+        
+    solicitudes = ReunionSolicitud.query.filter_by(solicitante_usuario_id=actor.id).order_by(ReunionSolicitud.created_at.desc()).all()
+    success, error = _request_messages()
+    return render_template(
+        "scheduler/requests_list.html",
+        solicitudes=solicitudes,
+        success=success,
+        error=error
+    )
+
+
+@web_bp.get("/web/solicitudes/nueva")
+@require_roles(ROLE_AGENDADOR, ROLE_COLABORADOR, api=False)
+def nueva_solicitud():
+    actor = g.current_user
+    active_zones = ZonaReunion.query.filter_by(estado="Activa").order_by(ZonaReunion.nombre).all()
+    if actor.role.nombre == ROLE_AGENDADOR:
+        active_zones = [z for z in active_zones if z.area_id in (actor.area_id, None)]
+        
+    if actor.role.nombre == ROLE_AGENDADOR:
+        users = Usuario.query.filter_by(area_id=actor.area_id, estado="Activo").order_by(Usuario.nombre).all()
+    else:
+        users = Usuario.query.filter_by(estado="Activo").order_by(Usuario.nombre).all()
+        
+    success, error = _request_messages()
+    return render_template(
+        "scheduler/request_form.html",
+        zones=active_zones,
+        users=users,
+        success=success,
+        error=error
+    )
+
+
+@web_bp.post("/web/solicitudes/nueva")
+@require_roles(ROLE_AGENDADOR, ROLE_COLABORADOR, api=False)
+def crear_solicitud_post():
+    actor = g.current_user
+    try:
+        from app.services.meeting_requests import create_meeting_request
+        payload = {
+            "titulo": request.form.get("titulo", "").strip(),
+            "motivo": request.form.get("motivo", "").strip(),
+            "zona_id": request.form.get("zona_id"),
+            "fecha": request.form.get("fecha"),
+            "hora_inicio": request.form.get("hora_inicio"),
+            "hora_fin": request.form.get("hora_fin"),
+            "participant_ids": request.form.getlist("participant_ids"),
+            "observacion_solicitante": request.form.get("observacion_solicitante", "").strip()
+        }
+        create_meeting_request(payload, actor)
+        return _redirect_with_message("web.solicitudes_list", success="Solicitud de reunión creada exitosamente.")
+    except Exception as e:
+        return _redirect_with_message("web.nueva_solicitud", error=str(e))
+
+
+@web_bp.get("/web/solicitudes/<int:sol_id>")
+@require_auth(api=False)
+def solicitud_detail(sol_id: int):
+    from app.models import ReunionSolicitud
+    sol = ReunionSolicitud.query.get_or_404(sol_id)
+    actor = g.current_user
+    if sol.solicitante_usuario_id != actor.id and actor.role.nombre not in (ROLE_SECRETARIA, ROLE_ADMIN):
+        return render_template("errors/unauthorized.html", message="Su cuenta no tiene acceso a este módulo.")
+        
+    success, error = _request_messages()
+    return render_template(
+        "scheduler/request_detail.html",
+        solicitud=sol,
+        success=success,
+        error=error
+    )
+
+
+@web_bp.post("/web/solicitudes/<int:sol_id>/cancelar")
+@require_auth(api=False)
+def cancelar_solicitud(sol_id: int):
+    actor = g.current_user
+    try:
+        from app.services.meeting_requests import cancel_own_meeting_request
+        cancel_own_meeting_request(sol_id, actor)
+        return _redirect_with_message("web.solicitudes_list", success="Solicitud cancelada exitosamente.")
+    except Exception as e:
+        return _redirect_with_message("web.solicitudes_list", error=str(e))
+
+
+@web_bp.get("/web/secretaria/solicitudes")
+@require_roles(ROLE_SECRETARIA, ROLE_ADMIN, api=False)
+def secretaria_solicitudes():
+    from app.models import ReunionSolicitud
+    solicitudes_pendientes = ReunionSolicitud.query.filter_by(estado="Pendiente").order_by(ReunionSolicitud.created_at.desc()).all()
+    solicitudes_revisadas = ReunionSolicitud.query.filter(ReunionSolicitud.estado != "Pendiente").order_by(ReunionSolicitud.updated_at.desc()).all()
+    success, error = _request_messages()
+    return render_template(
+        "scheduler/secretaria_requests.html",
+        pendientes=solicitudes_pendientes,
+        revisadas=solicitudes_revisadas,
+        success=success,
+        error=error
+    )
+
+
+@web_bp.get("/web/secretaria/solicitudes/<int:sol_id>")
+@require_roles(ROLE_SECRETARIA, ROLE_ADMIN, api=False)
+def secretaria_solicitud_review(sol_id: int):
+    from app.models import ReunionSolicitud
+    sol = ReunionSolicitud.query.get_or_404(sol_id)
+    success, error = _request_messages()
+    
+    from app.services.meeting_requests import check_availability
+    availability = check_availability(sol.fecha, sol.hora_inicio, sol.hora_fin)
+    
+    zone_status = next((z for z in availability["zonas"] if z["id"] == sol.zona_id), None)
+    
+    participant_ids = [p.usuario_id for p in sol.participantes]
+    participants_status = [u for u in availability["usuarios"] if u["id"] in participant_ids]
+    
+    can_approve = (zone_status and zone_status["disponible"]) and all(u["disponible"] for u in participants_status)
+    if sol.solicitante_usuario_id == g.current_user.id:
+        can_approve = False
+        
+    return render_template(
+        "scheduler/secretaria_request_review.html",
+        solicitud=sol,
+        zone_status=zone_status,
+        participants_status=participants_status,
+        can_approve=can_approve,
+        success=success,
+        error=error
+    )
+
+
+@web_bp.post("/web/secretaria/solicitudes/<int:sol_id>/aprobar")
+@require_roles(ROLE_SECRETARIA, ROLE_ADMIN, api=False)
+def secretaria_solicitud_aprobar(sol_id: int):
+    actor = g.current_user
+    try:
+        from app.services.meeting_requests import approve_meeting_request
+        approve_meeting_request(sol_id, actor)
+        return _redirect_with_message("web.secretaria_solicitudes", success="Solicitud aprobada y reunión agendada exitosamente.")
+    except Exception as e:
+        return _redirect_with_message("web.secretaria_solicitud_review", sol_id=sol_id, error=str(e))
+
+
+@web_bp.post("/web/secretaria/solicitudes/<int:sol_id>/rechazar")
+@require_roles(ROLE_SECRETARIA, ROLE_ADMIN, api=False)
+def secretaria_solicitud_rechazar(sol_id: int):
+    actor = g.current_user
+    reason = request.form.get("reason", "").strip()
+    try:
+        from app.services.meeting_requests import reject_meeting_request
+        reject_meeting_request(sol_id, actor, reason)
+        return _redirect_with_message("web.secretaria_solicitudes", success="Solicitud rechazada exitosamente.")
+    except Exception as e:
+        return _redirect_with_message("web.secretaria_solicitud_review", sol_id=sol_id, error=str(e))

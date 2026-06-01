@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel panel-muted" style="text-align: center; padding: 3rem 2rem; max-width: 600px; margin: 2rem auto;">
+  <div style="font-size: 4rem; color: var(--danger); margin-bottom: 1rem;">⚠️</div>
+  <h2 style="color: var(--brand); margin-bottom: 1rem;">Acceso Restringido</h2>
+  <p style="font-size: 1.15rem; color: var(--muted); line-height: 1.6; margin-bottom: 2rem;">
+    {{ message or "Su cuenta no tiene acceso a este módulo." }}
+  </p>
+  <div class="actions" style="justify-content: center;">
+    <a href="/" class="button-link" style="padding: 0.75rem 1.8rem; border-radius: 12px;">Volver al inicio</a>
+  </div>
+</section>
+{% endblock %}

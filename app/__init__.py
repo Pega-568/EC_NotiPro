@@ -29,7 +29,7 @@ def create_app(config_object=None) -> Flask:
     else:
         app.config.from_object(Config)
 
-    Config.validate_runtime_or_raise(app.config.get("debug_mode", "false"))
+    Config.validate_runtime_or_raise(app.config)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -68,7 +68,11 @@ def create_app(config_object=None) -> Flask:
                 ),
                 exc.status_code,
             )
-        return jsonify({"error": exc.message}), exc.status_code
+        from flask import render_template
+        message = exc.message
+        if exc.status_code == 403:
+            message = "Su cuenta no tiene acceso a este módulo."
+        return render_template("errors/unauthorized.html", message=message), exc.status_code
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception):

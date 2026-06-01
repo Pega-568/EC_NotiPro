@@ -441,3 +441,58 @@ class ActaAsistentesSnapshot(TimestampMixin, db.Model):
 
     acta: Mapped[ActaReunion] = relationship()
     usuario: Mapped[Usuario | None] = relationship(foreign_keys=[usuario_id])
+
+
+class ReunionSolicitud(TimestampMixin, db.Model):
+    __tablename__ = "reunion_solicitudes"
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('Pendiente', 'Aprobada', 'Rechazada', 'Cancelada')",
+            name="ck_solicitudes_estado",
+        ),
+        CheckConstraint(
+            "prioridad IN ('Baja', 'Media', 'Alta')",
+            name="ck_solicitudes_prioridad",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    solicitante_usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    titulo: Mapped[str] = mapped_column(db.String(150), nullable=False)
+    motivo: Mapped[str] = mapped_column(db.String(500), nullable=False)
+    fecha: Mapped[date] = mapped_column(nullable=False)
+    hora_inicio: Mapped[time] = mapped_column(nullable=False)
+    hora_fin: Mapped[time] = mapped_column(nullable=False)
+    zona_id: Mapped[int] = mapped_column(ForeignKey("zonas_reunion.id"), nullable=False)
+    prioridad: Mapped[str] = mapped_column(db.String(20), default="Media", nullable=False)
+    estado: Mapped[str] = mapped_column(db.String(20), default="Pendiente", nullable=False)
+    observacion_solicitante: Mapped[str | None] = mapped_column(db.String(500))
+    respuesta_secretaria: Mapped[str | None] = mapped_column(db.String(500))
+    revisada_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    revisada_at: Mapped[datetime | None] = mapped_column()
+    reunion_id: Mapped[int | None] = mapped_column(ForeignKey("reuniones.id"))
+
+    solicitante: Mapped[Usuario] = relationship(foreign_keys=[solicitante_usuario_id])
+    zona: Mapped[ZonaReunion] = relationship()
+    revisada_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisada_por_usuario_id])
+    reunion: Mapped[Reunion | None] = relationship()
+    participantes: Mapped[list[ReunionSolicitudParticipante]] = relationship(
+        back_populates="solicitud", cascade="all, delete-orphan"
+    )
+
+
+class ReunionSolicitudParticipante(db.Model):
+    __tablename__ = "reunion_solicitud_participantes"
+    __table_args__ = (
+        UniqueConstraint("solicitud_id", "usuario_id", name="uq_solicitud_participante"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    solicitud_id: Mapped[int] = mapped_column(ForeignKey("reunion_solicitudes.id"), nullable=False)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    area_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+
+    solicitud: Mapped[ReunionSolicitud] = relationship(back_populates="participantes")
+    usuario: Mapped[Usuario] = relationship()
+    area: Mapped[Area] = relationship()
