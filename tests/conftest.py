@@ -13,6 +13,7 @@ from app.security import hash_password
 def app():
     app = create_app("testing")
     with app.app_context():
+        db.drop_all()
         db.create_all()
         admin_role = Role(nombre=ROLE_ADMIN)
         scheduler_role = Role(nombre=ROLE_SECRETARIA)

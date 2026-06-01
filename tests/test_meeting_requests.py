@@ -178,9 +178,9 @@ def test_secretaria_puede_rechazar_solicitud(app):
 
 
 def test_usuario_y_sala_ocupados_comprobacion_disponibilidad(app):
-    with app.app_context():
+    with app.test_request_context():
         colaborador = Usuario.query.filter(Usuario.nombre == "Usuario 1").first()
-        secretaria = Usuario.query.filter(Usuario.nombre == "Admin").first()
+        secretaria = Usuario.query.filter(Usuario.nombre == "Secretaria").first()
         zona = ZonaReunion.query.first()
         participante = Usuario.query.filter(Usuario.nombre == "Usuario 2").first()
 
@@ -213,9 +213,9 @@ def test_usuario_y_sala_ocupados_comprobacion_disponibilidad(app):
 
 
 def test_no_se_puede_aprobar_si_disponibilidad_cambio(app):
-    with app.app_context():
+    with app.test_request_context():
         colaborador = Usuario.query.filter(Usuario.nombre == "Usuario 1").first()
-        secretaria = Usuario.query.filter(Usuario.nombre == "Admin").first()
+        secretaria = Usuario.query.filter(Usuario.nombre == "Secretaria").first()
         zona = ZonaReunion.query.first()
         participante = Usuario.query.filter(Usuario.nombre == "Usuario 2").first()
 

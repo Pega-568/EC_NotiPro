@@ -68,3 +68,6 @@ firebase-service-account*.json
 *service-account*.json
 secrets/
 credentials/
+
+# Local portable postgres
+postgres/

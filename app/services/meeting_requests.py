@@ -45,6 +45,7 @@ def check_availability(
     hora_fin: time,
     zona_id: int | None = None,
     usuario_ids: list[int] | None = None,
+    exclude_solicitud_id: int | None = None,
 ) -> dict:
     start_dt = _combine(fecha, hora_inicio)
     end_dt = _combine(fecha, hora_fin)
@@ -123,7 +124,7 @@ def check_availability(
 
         # Check pending requests
         if is_available:
-            solicitudes = (
+            query = (
                 db.session.query(ReunionSolicitud)
                 .join(
                     ReunionSolicitudParticipante,
@@ -134,8 +135,11 @@ def check_availability(
                     ReunionSolicitud.fecha == fecha,
                     ReunionSolicitud.estado == "Pendiente",
                 )
-                .all()
             )
+            if exclude_solicitud_id is not None:
+                query = query.filter(ReunionSolicitud.id != exclude_solicitud_id)
+            solicitudes = query.all()
+            
             for req in solicitudes:
                 other_start = _combine(req.fecha, req.hora_inicio) - timedelta(minutes=rest_minutes)
                 other_end = _combine(req.fecha, req.hora_fin) + timedelta(minutes=rest_minutes)
@@ -264,7 +268,7 @@ def create_meeting_request(payload: dict, actor: Usuario) -> ReunionSolicitud:
     return solicitud
 
 
-def approve_meeting_request(request_id: int, actor: Usuario) -> Reunion:
+def approve_meeting_request(request_id: int, actor: Usuario, responsable_reunion_id: int | None = None) -> Reunion:
     if actor.role.nombre not in (ROLE_SECRETARIA, ROLE_ADMIN):
         raise ForbiddenError(
             "Solo el personal de Secretaría o Administradores pueden aprobar solicitudes."
@@ -280,7 +284,8 @@ def approve_meeting_request(request_id: int, actor: Usuario) -> Reunion:
     if solicitud.solicitante_usuario_id == actor.id:
         raise ForbiddenError("No puede aprobar su propia solicitud de reunión.")
 
-    availability = check_availability(solicitud.fecha, solicitud.hora_inicio, solicitud.hora_fin)
+    # Pass exclude_solicitud_id to avoid blocking itself
+    availability = check_availability(solicitud.fecha, solicitud.hora_inicio, solicitud.hora_fin, exclude_solicitud_id=solicitud.id)
     
     zone_avail = next((z for z in availability["zonas"] if z["id"] == solicitud.zona_id), None)
     if not zone_avail or not zone_avail["disponible"]:
@@ -294,11 +299,19 @@ def approve_meeting_request(request_id: int, actor: Usuario) -> Reunion:
                 f"El participante {p_avail['nombre'] if p_avail else p_id} ya no está disponible en este horario."
             )
 
-    # Determine responsable for the Reunion
-    responsable_id = solicitud.solicitante_usuario_id
-    if responsable_id not in participant_ids:
-        # If the creator isn't a participant, set the first participant as responsable
-        responsable_id = participant_ids[0]
+    # Determine responsable for the Reunion with secretary selection
+    if responsable_reunion_id is not None:
+        responsable = Usuario.query.get(responsable_reunion_id)
+        if not responsable or responsable.estado != "Activo":
+            raise ValidationError("El responsable de reunión seleccionado no está activo.")
+        if responsable.id not in participant_ids:
+            raise ValidationError("El responsable de la reunión debe estar incluido en la lista de participantes.")
+        responsable_id = responsable.id
+    else:
+        responsable_id = solicitud.solicitante_usuario_id
+        if responsable_id not in participant_ids:
+            # If the creator isn't a participant, set the first participant as responsable
+            responsable_id = participant_ids[0]
 
     meeting = Reunion(
         titulo=solicitud.titulo,

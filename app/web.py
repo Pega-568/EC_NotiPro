@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, g, make_response, redirect, render_tem
 
 from app.audit import log_event
 from app.auth import clear_session_cookies, require_auth, require_roles, set_session_cookies
-from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA
+from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA, ROLE_AGENDADOR
 from app.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.extensions import db
 from app.models import Area, Configuracion, LogSistema, Reunion, Role, Usuario, ZonaReunion
@@ -198,7 +198,7 @@ def home():
             return redirect(url_for("web.admin_dashboard"))
         if g.current_user.role.nombre == ROLE_SECRETARIA:
             return redirect(url_for("web.scheduler_dashboard"))
-        return redirect(url_for("web.user_dashboard"))
+        return redirect(url_for("web.solicitudes_list"))
     return redirect(url_for("web.login"))
 
 
@@ -1059,7 +1059,7 @@ def secretaria_solicitud_review(sol_id: int):
     success, error = _request_messages()
     
     from app.services.meeting_requests import check_availability
-    availability = check_availability(sol.fecha, sol.hora_inicio, sol.hora_fin)
+    availability = check_availability(sol.fecha, sol.hora_inicio, sol.hora_fin, exclude_solicitud_id=sol.id)
     
     zone_status = next((z for z in availability["zonas"] if z["id"] == sol.zona_id), None)
     
@@ -1087,7 +1087,9 @@ def secretaria_solicitud_aprobar(sol_id: int):
     actor = g.current_user
     try:
         from app.services.meeting_requests import approve_meeting_request
-        approve_meeting_request(sol_id, actor)
+        resp_id_raw = request.form.get("responsable_reunion_id")
+        responsable_id = int(resp_id_raw) if resp_id_raw else None
+        approve_meeting_request(sol_id, actor, responsable_id)
         return _redirect_with_message("web.secretaria_solicitudes", success="Solicitud aprobada y reunión agendada exitosamente.")
     except Exception as e:
         return _redirect_with_message("web.secretaria_solicitud_review", sol_id=sol_id, error=str(e))
