@@ -10,7 +10,7 @@ from app.models import Reunion, ReunionSolicitud
 
 
 BASE_URL = os.environ.get("E2E_BASE_URL", "http://127.0.0.1:5000")
-SCREENSHOT_DIR = Path(__file__).resolve().parent
+SCREENSHOT_DIR = Path(__file__).resolve().parents[1] / "docs" / "evidence" / "web-ui-polish"
 
 
 USERS = {
@@ -107,6 +107,8 @@ def approve_request(page, sol_id: int) -> int:
 
 
 def main() -> None:
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
     app = create_app()
     with app.app_context():
         initial_meetings = Reunion.query.count()
