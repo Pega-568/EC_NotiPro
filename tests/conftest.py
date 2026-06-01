@@ -11,8 +11,25 @@ from app.security import hash_password
 
 @pytest.fixture
 def app():
+    import os
     app = create_app("testing")
     with app.app_context():
+        # Guard safety checks before dropping database
+        app_env = app.config.get("APP_ENV")
+        test_db_url = os.getenv("TEST_DATABASE_URL", "").strip()
+        if app_env != "testing":
+            raise RuntimeError("Prohibido: drop_all() solo se permite si APP_ENV es 'testing'.")
+        if not test_db_url:
+            raise RuntimeError("Prohibido: drop_all() requiere que TEST_DATABASE_URL esté configurado.")
+        
+        db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "").lower()
+        allow_reset = os.getenv("ALLOW_TEST_DB_RESET", "").strip().lower() == "true"
+        if "test" not in db_uri and not allow_reset:
+            raise RuntimeError(
+                f"Prohibido: drop_all() cancelado por seguridad. La base de datos '{db_uri}' "
+                "no contiene 'test' en su nombre y ALLOW_TEST_DB_RESET no es 'true'."
+            )
+
         db.drop_all()
         db.create_all()
         admin_role = Role(nombre=ROLE_ADMIN)
