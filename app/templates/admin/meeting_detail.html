@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% block page_title %}Reunión creada | EC_NotiPro{% endblock %}
+{% block header_title %}Detalle de reunión{% endblock %}
 {% block content %}
 <section class="panel">
-  <h2>Detalle de reunion</h2>
+  <h2 class="section-title">Detalle de reunion</h2>
   <div class="row">
     <div><strong>Titulo:</strong><br>{{ meeting_data.titulo }}</div>
     <div><strong>Estado:</strong><br>{{ meeting_data.estado }}</div>
@@ -14,18 +16,19 @@
   </div>
   <p><strong>Motivo:</strong><br>{{ meeting_data.motivo }}</p>
   <div class="actions">
-    <a class="button-link" href="/web/admin/reuniones/{{ meeting.id }}/editar">Editar reunion</a>
+    <a class="btn btn-primary" href="/web/admin/reuniones/{{ meeting.id }}/editar">Editar reunion</a>
     {% if meeting.estado != "Cancelada" %}
-    <form class="inline-form" method="post" action="/web/admin/reuniones/{{ meeting.id }}/cancelar">
+    <form class="inline-form" method="post" action="/web/admin/reuniones/{{ meeting.id }}/cancelar" data-confirm="¿Confirma la cancelación de esta reunión?">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
-      <button type="submit">Cancelar reunion</button>
+      <button type="submit" class="btn-danger">Cancelar reunion</button>
     </form>
     {% endif %}
-    <a href="/web/admin/reuniones">Volver al listado</a>
+    <a class="btn btn-secondary" href="/web/admin/reuniones">Volver al listado</a>
   </div>
 </section>
 <section class="panel" style="margin-top: 1rem;">
-  <h2>Participantes</h2>
+  <h2 class="section-title">Participantes</h2>
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Nombre</th><th>Correo</th><th>Estado respuesta</th><th>Razon rechazo</th><th>Fecha respuesta</th></tr></thead>
     <tbody>
@@ -40,9 +43,11 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 <section class="panel" style="margin-top: 1rem;">
-  <h2>Logs relacionados</h2>
+  <h2 class="section-title">Logs relacionados</h2>
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Fecha</th><th>Accion</th><th>Resultado</th><th>Detalle</th></tr></thead>
     <tbody>
@@ -61,5 +66,6 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 {% endblock %}

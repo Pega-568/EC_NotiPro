@@ -1,23 +1,38 @@
 {% extends "base.html" %}
+{% block page_title %}Mis solicitudes | EC_NotiPro{% endblock %}
+{% block header_title %}Mis solicitudes{% endblock %}
 {% block content %}
-<section class="panel" style="margin-top: 1rem;">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-    <h2 style="margin: 0; color: var(--brand);">Mis Solicitudes de Reunión</h2>
-    <a href="/web/solicitudes/nueva" class="button-link" style="padding: 0.65rem 1.4rem; border-radius: 12px;">+ Solicitar Nueva</a>
+<section class="panel">
+  <div class="table-tools">
+    <div>
+      <h2 class="section-title">Mis solicitudes de reunión</h2>
+      <p class="muted" style="margin: 0;">Consulte el estado de sus solicitudes y cree nuevas reuniones para revisión.</p>
+    </div>
+    <a href="/web/solicitudes/nueva" class="btn btn-primary">Solicitar Nueva</a>
   </div>
-  
+
   {% if not solicitudes %}
-  <div style="text-align: center; padding: 3rem 1rem; color: var(--muted);">
-    <p style="font-size: 1.1rem; margin-bottom: 1rem;">No has realizado ninguna solicitud de reunión todavía.</p>
-    <a href="/web/solicitudes/nueva" class="button-link secondary" style="padding: 0.5rem 1rem; border-radius: 10px;">Crear mi primera solicitud</a>
+  <div class="empty-state">
+    <p>No ha realizado solicitudes de reunión todavía.</p>
+    <a href="/web/solicitudes/nueva" class="btn btn-outline">Crear mi primera solicitud</a>
   </div>
   {% else %}
-  <div style="overflow-x: auto;">
-    <table>
+  <div class="table-tools">
+    <input type="search" placeholder="Buscar por título, sala o estado" data-table-search="mis-solicitudes">
+    <select data-table-filter="mis-solicitudes" data-filter-attr="estado" aria-label="Filtrar solicitudes por estado">
+      <option value="">Todos los estados</option>
+      <option value="Pendiente">Pendiente</option>
+      <option value="Aprobada">Aprobada</option>
+      <option value="Rechazada">Rechazada</option>
+      <option value="Cancelada">Cancelada</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table data-table-id="mis-solicitudes">
       <thead>
         <tr>
           <th>Título</th>
-          <th>Fecha y Horario</th>
+          <th>Fecha y horario</th>
           <th>Prioridad</th>
           <th>Estado</th>
           <th>Sala</th>
@@ -27,40 +42,30 @@
       </thead>
       <tbody>
         {% for sol in solicitudes %}
-        <tr>
+        <tr data-estado="{{ sol.estado }}">
           <td><strong>{{ sol.titulo }}</strong></td>
-          <td>{{ sol.fecha.strftime('%d/%m/%Y') }} <span class="muted">{{ sol.hora_inicio.strftime('%H:%M') }} - {{ sol.hora_fin.strftime('%H:%M') }}</span></td>
-          <td>
-            {% if sol.prioridad == 'Alta' %}
-            <span class="badge danger">{{ sol.prioridad }}</span>
-            {% elif sol.prioridad == 'Baja' %}
-            <span class="badge secondary" style="background: #eef5fc; color: var(--brand);">{{ sol.prioridad }}</span>
-            {% else %}
-            <span class="badge warning">{{ sol.prioridad }}</span>
-            {% endif %}
-          </td>
+          <td>{{ sol.fecha.strftime('%d/%m/%Y') }}<div class="muted">{{ sol.hora_inicio.strftime('%H:%M') }} - {{ sol.hora_fin.strftime('%H:%M') }}</div></td>
+          <td><span class="badge {{ 'danger' if sol.prioridad == 'Alta' else 'warning' if sol.prioridad == 'Media' else 'neutral' }}">{{ sol.prioridad }}</span></td>
           <td>
             {% if sol.estado == 'Pendiente' %}
-            <span class="badge warning" style="background: #fff8eb; color: #b25e00;">Pendiente</span>
+            <span class="badge warning">Pendiente</span>
             {% elif sol.estado == 'Aprobada' %}
             <span class="badge success">Aprobada</span>
             {% elif sol.estado == 'Rechazada' %}
             <span class="badge danger">Rechazada</span>
             {% else %}
-            <span class="badge secondary" style="background: #f1f5f9; color: #64748b;">Cancelada</span>
+            <span class="badge neutral">Cancelada</span>
             {% endif %}
           </td>
           <td>{{ sol.zona.nombre }}</td>
           <td>
             {% if sol.revisada_por %}
-            {{ sol.revisada_por.nombre }} <span class="muted" style="font-size: 0.85rem;">({{ sol.revisada_at.strftime('%d/%m/%Y') }})</span>
+            {{ sol.revisada_por.nombre }}<div class="muted">{{ sol.revisada_at.strftime('%d/%m/%Y') }}</div>
             {% else %}
             <span class="muted">Aún no revisada</span>
             {% endif %}
           </td>
-          <td class="actions">
-            <a href="/web/solicitudes/{{ sol.id }}" class="button-link secondary" style="padding: 0.35rem 0.75rem; font-size: 0.85rem; border-radius: 8px;">Ver detalle</a>
-          </td>
+          <td><a href="/web/solicitudes/{{ sol.id }}" class="btn btn-outline btn-compact">Ver detalle</a></td>
         </tr>
         {% endfor %}
       </tbody>
