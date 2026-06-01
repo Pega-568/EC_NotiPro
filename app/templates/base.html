@@ -3,224 +3,100 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title or "EC_NotiPro | Ecuamatriz" }}</title>
-  <style>
-    :root {
-      --bg: #eef3f8;
-      --bg-strong: #dce7f4;
-      --panel: #ffffff;
-      --ink: #1d2b39;
-      --muted: #5f7287;
-      --brand: #003b8e;
-      --brand-soft: #d8e7ff;
-      --brand-2: #00a0df;
-      --line: #c7d4e3;
-      --success: #0b6b3a;
-      --success-soft: #d9f3e5;
-      --danger: #8f1d1d;
-      --danger-soft: #f8dddd;
-      --warning: #9d5f00;
-      --warning-soft: #fff0cc;
-      --shadow: 0 20px 40px rgba(0, 42, 92, 0.08);
-      --radius: 18px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      background:
-        radial-gradient(circle at top right, rgba(0,160,223,0.10), transparent 24%),
-        linear-gradient(180deg, var(--bg-strong), var(--bg));
-      color: var(--ink);
-    }
-    a { color: var(--brand); text-decoration: none; }
-    header {
-      background: linear-gradient(135deg, #00285f, #0047ab 62%, #00a0df);
-      color: #fff;
-      padding: 1.1rem 0 1.4rem;
-      box-shadow: var(--shadow);
-    }
-    .shell { max-width: 1240px; margin: 0 auto; padding: 0 1.2rem; }
-    .header-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .brand { display: flex; align-items: center; gap: 1rem; }
-    .brand-mark {
-      width: 58px;
-      height: 58px;
-      border-radius: 16px;
-      background: rgba(255,255,255,0.18);
-      display: grid;
-      place-items: center;
-      font-size: 1.8rem;
-      font-weight: 800;
-      border: 1px solid rgba(255,255,255,0.24);
-    }
-    .brand h1 { margin: 0; font-size: 1.7rem; }
-    .brand p { margin: 0.2rem 0 0; color: rgba(255,255,255,0.82); }
-    .user-chip {
-      padding: 0.7rem 1rem;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.2);
-      font-size: 0.95rem;
-    }
-    nav {
-      margin-top: 1rem;
-      display: flex;
-      gap: 0.65rem;
-      flex-wrap: wrap;
-    }
-    nav a {
-      color: #fff;
-      padding: 0.65rem 0.95rem;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.10);
-      border: 1px solid rgba(255,255,255,0.16);
-      font-weight: 600;
-    }
-    nav a:hover { background: rgba(255,255,255,0.18); }
-    main { padding: 1.3rem 0 2rem; }
-    .layout {
-      display: grid;
-      gap: 1rem;
-    }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 1rem 1.1rem;
-      box-shadow: var(--shadow);
-    }
-    .panel-muted { background: #f7fbff; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.85rem; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.75rem 0.65rem; border-bottom: 1px solid #e4edf7; vertical-align: top; }
-    th { color: var(--muted); font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.04em; }
-    input, select, textarea, button {
-      width: 100%;
-      padding: 0.75rem 0.8rem;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      font: inherit;
-      background: #fff;
-    }
-    textarea { min-height: 110px; resize: vertical; }
-    button, .button-link {
-      background: linear-gradient(135deg, var(--brand), #0058c7);
-      color: white;
-      font-weight: 700;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      border: none;
-    }
-    .button-link.secondary, button.secondary {
-      background: #eff5fb;
-      color: var(--brand);
-      border: 1px solid var(--line);
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.3rem 0.7rem;
-      border-radius: 999px;
-      background: var(--brand-soft);
-      color: var(--brand);
-      font-weight: 700;
-    }
-    .badge.success { background: var(--success-soft); color: var(--success); }
-    .badge.warning { background: var(--warning-soft); color: var(--warning); }
-    .badge.danger { background: var(--danger-soft); color: var(--danger); }
-    .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
-    .inline-form { display: inline-block; margin: 0; }
-    .error, .success {
-      border-radius: 14px;
-      padding: 0.85rem 1rem;
-      font-weight: 700;
-      margin: 0 0 1rem;
-    }
-    .error { color: var(--danger); background: var(--danger-soft); }
-    .success { color: var(--success); background: var(--success-soft); }
-    .metric {
-      padding: 1rem;
-      border-radius: 16px;
-      background: linear-gradient(180deg, #f8fbff, #eef5fc);
-      border: 1px solid var(--line);
-    }
-    .metric strong { display: block; font-size: 1.6rem; color: var(--brand); }
-    .muted { color: var(--muted); }
-    pre { white-space: pre-wrap; word-break: break-word; }
-    .logout-form { max-width: 220px; margin-top: 0.85rem; }
-    @media (max-width: 720px) {
-      header { padding-bottom: 1rem; }
-      .header-top { align-items: flex-start; }
-      nav { overflow-x: auto; padding-bottom: 0.2rem; }
-      .panel { padding: 0.95rem; }
-    }
-  </style>
+  <title>{% block page_title %}{{ title or "EC_NotiPro | Ecuamatriz" }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/web-ui.css') }}">
 </head>
 <body>
-  <header>
-    <div class="shell">
-      <div class="header-top">
+  {% set role_name = g.current_user.role.nombre if g.current_user else "" %}
+  {% set current_path = request.path %}
+  <div class="app-shell" data-app-shell>
+    {% if g.current_user %}
+    <aside class="sidebar" aria-label="Navegación principal">
+      <div class="sidebar-inner">
         <div class="brand">
           <div class="brand-mark">E</div>
-          <div>
-            <h1>EC_NotiPro</h1>
-            <p>Agenda interna y notificaciones institucionales de Ecuamatriz</p>
+          <div class="brand-text">
+            <strong>EC_NotiPro</strong>
+            <span>Agenda institucional</span>
           </div>
+          <button type="button" class="sidebar-toggle" data-sidebar-toggle aria-label="Colapsar menú">☰</button>
         </div>
-        {% if g.current_user %}
-        <div class="user-chip">
-          {{ g.current_user.nombre }} · {{ g.current_user.role.nombre }}
-        </div>
-        {% endif %}
+
+        <nav class="sidebar-nav">
+          <a href="/" class="{{ 'is-active' if current_path == '/' else '' }}"><span class="nav-icon">⌂</span><span class="nav-label">Inicio</span></a>
+          {% if role_name == "Administrador del sistema" %}
+          <a href="/web/admin" class="{{ 'is-active' if current_path == '/web/admin' else '' }}"><span class="nav-icon">▦</span><span class="nav-label">Panel</span></a>
+          <a href="/web/admin/calendario" class="{{ 'is-active' if current_path.startswith('/web/admin/calendario') else '' }}"><span class="nav-icon">□</span><span class="nav-label">Calendario</span></a>
+          <a href="/web/admin/reuniones" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones') else '' }}"><span class="nav-icon">◷</span><span class="nav-label">Reuniones</span></a>
+          <a href="/web/secretaria/solicitudes" class="{{ 'is-active' if current_path.startswith('/web/secretaria/solicitudes') else '' }}"><span class="nav-icon">✉</span><span class="nav-label">Solicitudes</span></a>
+          <a href="/web/admin/usuarios" class="{{ 'is-active' if current_path.startswith('/web/admin/usuarios') else '' }}"><span class="nav-icon">◎</span><span class="nav-label">Usuarios</span></a>
+          <a href="/web/admin/areas" class="{{ 'is-active' if current_path.startswith('/web/admin/areas') else '' }}"><span class="nav-icon">◇</span><span class="nav-label">Areas</span></a>
+          <a href="/web/admin/zonas" class="{{ 'is-active' if current_path.startswith('/web/admin/zonas') else '' }}"><span class="nav-icon">⌖</span><span class="nav-label">Zonas</span></a>
+          <a href="/web/admin/logs" class="{{ 'is-active' if current_path.startswith('/web/admin/logs') else '' }}"><span class="nav-icon">≡</span><span class="nav-label">Logs</span></a>
+          <a href="/web/admin/configuracion" class="{{ 'is-active' if current_path.startswith('/web/admin/configuracion') else '' }}"><span class="nav-icon">⚙</span><span class="nav-label">Configuracion</span></a>
+          {% elif role_name == "Secretaria" %}
+          <a href="/scheduler" class="{{ 'is-active' if current_path == '/scheduler' else '' }}"><span class="nav-icon">▦</span><span class="nav-label">Panel</span></a>
+          <a href="/web/admin/calendario" class="{{ 'is-active' if current_path.startswith('/web/admin/calendario') else '' }}"><span class="nav-icon">□</span><span class="nav-label">Calendario</span></a>
+          <a href="/web/admin/reuniones" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones') else '' }}"><span class="nav-icon">◷</span><span class="nav-label">Reuniones</span></a>
+          <a href="/web/secretaria/solicitudes" class="{{ 'is-active' if current_path.startswith('/web/secretaria/solicitudes') else '' }}"><span class="nav-icon">✉</span><span class="nav-label">Solicitudes</span></a>
+          <a href="/scheduler/usuarios" class="{{ 'is-active' if current_path.startswith('/scheduler/usuarios') else '' }}"><span class="nav-icon">◎</span><span class="nav-label">Participantes</span></a>
+          <a href="/scheduler/zonas" class="{{ 'is-active' if current_path.startswith('/scheduler/zonas') else '' }}"><span class="nav-icon">⌖</span><span class="nav-label">Zonas</span></a>
+          {% else %}
+          <a href="/web/solicitudes" class="{{ 'is-active' if current_path == '/web/solicitudes' else '' }}"><span class="nav-icon">≡</span><span class="nav-label">Mis solicitudes</span></a>
+          <a href="/web/solicitudes/nueva" class="{{ 'is-active' if current_path.startswith('/web/solicitudes/nueva') else '' }}"><span class="nav-icon">＋</span><span class="nav-label">Solicitar</span></a>
+          {% endif %}
+        </nav>
+
+        <div class="sidebar-footer">Ecuamatriz · Operación interna</div>
       </div>
-      {% if g.current_user %}
-      <nav>
-        <a href="/">Inicio</a>
-        {% if g.current_user.role.nombre == "Administrador del sistema" %}
-        <a href="/web/admin">Panel</a>
-        <a href="/web/admin/calendario">Calendario</a>
-        <a href="/web/admin/reuniones">Reuniones</a>
-        <a href="/web/admin/usuarios">Usuarios</a>
-        <a href="/web/admin/areas">Areas</a>
-        <a href="/web/admin/zonas">Zonas</a>
-        <a href="/web/admin/logs">Logs</a>
-        <a href="/web/admin/configuracion">Configuracion</a>
-        {% elif g.current_user.role.nombre == "Secretaria" %}
-        <a href="/scheduler">Operacion</a>
-        <a href="/web/admin/calendario">Calendario</a>
-        <a href="/web/admin/reuniones">Reuniones</a>
-        <a href="/scheduler/usuarios">Participantes</a>
-        <a href="/scheduler/zonas">Zonas</a>
-        {% else %}
-        <a href="/mis-reuniones">Mis reuniones</a>
-        {% endif %}
-      </nav>
-      <form class="logout-form" method="post" action="/logout">
-        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
-        <button type="submit" class="secondary">Cerrar sesion</button>
-      </form>
-      {% endif %}
+    </aside>
+    {% endif %}
+
+    <div class="content-shell">
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="topbar-actions">
+            {% if g.current_user %}
+            <button type="button" class="mobile-menu-toggle btn-outline" data-mobile-menu-toggle aria-label="Abrir menú">☰</button>
+            {% endif %}
+            <h1 class="page-title">{% block header_title %}{{ title or "EC_NotiPro" }}{% endblock %}</h1>
+          </div>
+
+          {% if g.current_user %}
+          <div class="user-menu" data-user-menu>
+            <button type="button" class="user-menu-button btn-outline" data-user-menu-button aria-haspopup="true" aria-expanded="false">
+              <span class="user-meta">
+                <strong>{{ g.current_user.nombre }}</strong>
+                <span>{{ role_name }}</span>
+              </span>
+              <span aria-hidden="true">⌄</span>
+            </button>
+            <div class="user-dropdown">
+              <div class="info-card" style="margin-bottom: 0.5rem;">
+                <strong>{{ g.current_user.nombre }}</strong>
+                <div class="muted">{{ g.current_user.correo }}</div>
+                <span class="badge">{{ role_name }}</span>
+              </div>
+              <form method="post" action="/logout" data-confirm="¿Desea cerrar la sesión actual?">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+                <button type="submit" class="btn-outline">Cerrar sesión</button>
+              </form>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </header>
+
+      <main>
+        <div class="layout">
+          {% if success %}<p class="alert alert-success">{{ success }}</p>{% endif %}
+          {% if error %}<p class="alert alert-danger">{{ error }}</p>{% endif %}
+          {% block content %}{% endblock %}
+        </div>
+      </main>
     </div>
-  </header>
-  <main>
-    <div class="shell layout">
-      {% if success %}<p class="success">{{ success }}</p>{% endif %}
-      {% if error %}<p class="error">{{ error }}</p>{% endif %}
-      {% block content %}{% endblock %}
-    </div>
-  </main>
+  </div>
+  <script src="{{ url_for('static', filename='js/web-ui.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

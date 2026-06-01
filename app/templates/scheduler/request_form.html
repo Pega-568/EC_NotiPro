@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block page_title %}Solicitar reunión | EC_NotiPro{% endblock %}
+{% block header_title %}Solicitar reunión{% endblock %}
+{% block content %}
+{% set areas = users|map(attribute='area')|list %}
+{% set roles = users|map(attribute='role')|list %}
+<div class="actions">
+  <a href="/web/solicitudes" class="btn btn-secondary">Volver</a>
+</div>
+
+<form id="requestForm" method="post" action="/web/solicitudes/nueva">
+  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+
+  <div class="two-column">
+    <div class="form-section">
+      <section class="panel">
+        <h2 class="section-title">Datos de reunión</h2>
+        <div class="field">
+          <label for="titulo">Título de la reunión *</label>
+          <input type="text" id="titulo" name="titulo" required placeholder="Ej. Alineación semanal del equipo">
+        </div>
+        <div class="field">
+          <label for="motivo">Motivo / descripción *</label>
+          <textarea id="motivo" name="motivo" required placeholder="Detalle los temas a tratar o la justificación de la reunión."></textarea>
+        </div>
+        <div class="field">
+          <label for="prioridad">Prioridad</label>
+          <select id="prioridad" name="prioridad">
+            <option value="Baja">Baja</option>
+            <option value="Media" selected>Media</option>
+            <option value="Alta">Alta</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Fecha y horario</h2>
+        <div class="row">
+          <div class="field">
+            <label for="fecha">Fecha *</label>
+            <input type="date" id="fecha" name="fecha" required>
+          </div>
+          <div class="field">
+            <label for="hora_inicio">Hora de inicio *</label>
+            <input type="time" id="hora_inicio" name="hora_inicio" required>
+          </div>
+          <div class="field">
+            <label for="hora_fin">Hora de fin *</label>
+            <input type="time" id="hora_fin" name="hora_fin" required>
+          </div>
+        </div>
+        <p id="availabilityNotice" class="alert alert-warning" role="status"></p>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Sala</h2>
+        <div class="selector-toolbar">
+          <input id="zoneSearch" type="search" placeholder="Buscar sala o ubicación">
+          <select id="zoneArea" aria-label="Filtrar salas por área">
+            <option value="">Todas las áreas</option>
+            <option value="global">Globales</option>
+            {% for zone in zones %}
+              {% if zone.area %}
+              <option value="{{ zone.area.nombre }}">{{ zone.area.nombre }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <select id="zoneAvailability" aria-label="Filtrar salas por disponibilidad">
+            <option value="">Todas</option>
+            <option value="1">Disponibles</option>
+            <option value="0">Ocupadas</option>
+          </select>
+        </div>
+        <div class="selector-toolbar" style="grid-template-columns: 220px minmax(0, 1fr);">
+          <input id="zoneCapacity" type="number" min="1" placeholder="Capacidad mínima">
+          <span class="muted">Seleccione una sala disponible para continuar.</span>
+        </div>
+
+        <select id="zona_id" name="zona_id" required aria-label="Sala seleccionada" style="position:absolute; left:-9999px; width:1px; height:1px;">
+          <option value="" disabled selected>Seleccione una sala</option>
+          {% for zone in zones %}
+          <option value="{{ zone.id }}" data-original-name="{{ zone.nombre }}">{{ zone.nombre }} (Ubicación: {{ zone.ubicacion }}, Capacidad: {{ zone.capacidad }} personas)</option>
+          {% endfor %}
+        </select>
+
+        <div class="zone-grid">
+          {% for zone in zones %}
+          <label class="select-card zone-card" data-zone-card data-zone-id="{{ zone.id }}" data-name="{{ zone.nombre }}" data-location="{{ zone.ubicacion }}" data-area="{{ zone.area.nombre if zone.area else 'global' }}" data-capacity="{{ zone.capacidad }}" data-available="1">
+            <input type="radio" name="zone_visual" value="{{ zone.id }}">
+            <span class="select-card-main">
+              <span class="select-card-title">{{ zone.nombre }}</span>
+              <span class="select-card-meta">{{ zone.ubicacion }} · {{ zone.capacidad }} personas · {{ zone.area.nombre if zone.area else 'Global' }}</span>
+              <span class="badge success availability-badge">Disponible</span>
+              <span class="select-card-reason"></span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Participantes</h2>
+        <div class="selector-toolbar">
+          <input id="participantSearch" type="search" placeholder="Buscar por nombre o correo">
+          <select id="participantArea" aria-label="Filtrar participantes por área">
+            <option value="">Todas las áreas</option>
+            {% for area in areas|unique(attribute='id') %}
+            <option value="{{ area.nombre }}">{{ area.nombre }}</option>
+            {% endfor %}
+          </select>
+          <select id="participantRole" aria-label="Filtrar participantes por rol">
+            <option value="">Todos los roles</option>
+            {% for role in roles|unique(attribute='id') %}
+            <option value="{{ role.nombre }}">{{ role.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="selectedParticipants" class="selected-chips" aria-live="polite"></div>
+
+        <div id="participantsContainer" class="selector-grid" style="margin-top: 0.85rem;">
+          {% for user in users %}
+          <label for="chk-{{ user.id }}" class="select-card" id="user-row-{{ user.id }}" data-participant-card data-user-id="{{ user.id }}" data-name="{{ user.nombre }}" data-email="{{ user.correo }}" data-area="{{ user.area.nombre }}" data-role="{{ user.role.nombre }}" data-available="1">
+            <input type="checkbox" name="participant_ids" value="{{ user.id }}" id="chk-{{ user.id }}">
+            <span class="select-card-main">
+              <span class="select-card-title">{{ user.nombre }}</span>
+              <span class="select-card-meta">{{ user.correo }} · {{ user.area.nombre }} · {{ user.role.nombre }}</span>
+              <span class="badge success availability-badge">Disponible</span>
+              <span class="select-card-reason status-label"></span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Observaciones</h2>
+        <div class="field">
+          <label for="observacion_solicitante">Notas adicionales</label>
+          <textarea id="observacion_solicitante" name="observacion_solicitante" placeholder="Ej. Requerimos proyector o conexión remota."></textarea>
+        </div>
+      </section>
+    </div>
+
+    <aside class="panel summary-panel">
+      <h2 class="section-title">Resumen antes de enviar</h2>
+      <dl class="summary-list">
+        <div class="summary-row"><dt>Título</dt><dd id="summaryTitle">Sin título</dd></div>
+        <div class="summary-row"><dt>Fecha/hora</dt><dd id="summaryWhen">Pendiente</dd></div>
+        <div class="summary-row"><dt>Sala</dt><dd id="summaryZone">Sin sala</dd></div>
+        <div class="summary-row"><dt>Participantes</dt><dd><span id="summaryParticipants">0</span></dd></div>
+        <div class="summary-row"><dt>Disponibilidad</dt><dd><span id="summaryStatus" class="badge warning">Pendiente</span></dd></div>
+      </dl>
+      <div class="actions" style="margin-top: 1rem;">
+        <button type="submit" class="btn-success">Enviar Solicitud</button>
+        <a href="/web/solicitudes" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </aside>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/meeting-request-form.js') }}"></script>
+{% endblock %}

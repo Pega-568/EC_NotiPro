@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="/web/solicitudes" class="button-link secondary" style="align-self: flex-start; padding: 0.5rem 1rem; border-radius: 10px; margin-bottom: 1rem;">← Volver al listado</a>
+
+<section class="panel">
+  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e4edf7; padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h2 style="margin: 0; color: var(--brand);">Detalle de Solicitud</h2>
+      <p class="muted" style="margin: 0.2rem 0 0;">Creada el {{ solicitud.created_at.strftime('%d/%m/%Y a las %H:%M') }}</p>
+    </div>
+    <div>
+      {% if solicitud.estado == 'Pendiente' %}
+      <span class="badge warning" style="background: #fff8eb; color: #b25e00; font-size: 1.1rem; padding: 0.5rem 1.2rem;">Pendiente</span>
+      {% elif solicitud.estado == 'Aprobada' %}
+      <span class="badge success" style="font-size: 1.1rem; padding: 0.5rem 1.2rem;">Aprobada</span>
+      {% elif solicitud.estado == 'Rechazada' %}
+      <span class="badge danger" style="font-size: 1.1rem; padding: 0.5rem 1.2rem;">Rechazada</span>
+      {% else %}
+      <span class="badge secondary" style="background: #f1f5f9; color: #64748b; font-size: 1.1rem; padding: 0.5rem 1.2rem;">Cancelada</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid" style="margin-bottom: 2rem;">
+    <div>
+      <h4 class="muted" style="margin: 0 0 0.4rem;">Título de la Reunión</h4>
+      <p style="font-size: 1.2rem; font-weight: 700; margin: 0;">{{ solicitud.titulo }}</p>
+    </div>
+    <div>
+      <h4 class="muted" style="margin: 0 0 0.4rem;">Ubicación / Sala</h4>
+      <p style="font-size: 1.2rem; font-weight: 700; margin: 0;">{{ solicitud.zona.nombre }} <span class="muted" style="font-size: 0.95rem; font-weight: 400;">({{ solicitud.zona.ubicacion }})</span></p>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-bottom: 2rem;">
+    <div>
+      <h4 class="muted" style="margin: 0 0 0.4rem;">Fecha</h4>
+      <p style="font-size: 1.2rem; font-weight: 700; margin: 0;">{{ solicitud.fecha.strftime('%d/%m/%Y') }}</p>
+    </div>
+    <div>
+      <h4 class="muted" style="margin: 0 0 0.4rem;">Horario</h4>
+      <p style="font-size: 1.2rem; font-weight: 700; margin: 0;">{{ solicitud.hora_inicio.strftime('%H:%M') }} - {{ solicitud.hora_fin.strftime('%H:%M') }}</p>
+    </div>
+  </div>
+
+  <div style="margin-bottom: 2rem;">
+    <h4 class="muted" style="margin: 0 0 0.4rem;">Motivo / Descripción de la Reunión</h4>
+    <p style="font-size: 1.05rem; line-height: 1.6; margin: 0; white-space: pre-wrap; background: #f8fafc; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0;">{{ solicitud.motivo }}</p>
+  </div>
+
+  {% if solicitud.observacion_solicitante %}
+  <div style="margin-bottom: 2rem;">
+    <h4 class="muted" style="margin: 0 0 0.4rem;">Observaciones del Solicitante</h4>
+    <p style="font-size: 1.05rem; line-height: 1.6; margin: 0; white-space: pre-wrap; background: #f8fafc; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0;">{{ solicitud.observacion_solicitante }}</p>
+  </div>
+  {% endif %}
+
+  {% if solicitud.respuesta_secretaria %}
+  <div class="panel-muted" style="padding: 1.2rem; border-radius: 14px; border: 1px dashed var(--danger); margin-bottom: 2rem; background: #fffcfc;">
+    <h4 class="danger" style="margin: 0 0 0.4rem; color: var(--danger); font-weight: 700;">Respuesta de Secretaría</h4>
+    <p style="font-size: 1.05rem; line-height: 1.6; margin: 0; color: #7f1d1d;">{{ solicitud.respuesta_secretaria }}</p>
+  </div>
+  {% endif %}
+
+  <div style="margin-bottom: 2rem;">
+    <h4 class="muted" style="margin: 0 0 0.6rem;">Participantes Convocados</h4>
+    <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.85rem;">
+      {% for part in solicitud.participantes %}
+      <div style="padding: 0.75rem 1rem; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 0.85rem;">
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 700;">
+          {{ part.usuario.nombre[0]|upper }}
+        </div>
+        <div>
+          <strong style="display: block; font-size: 0.95rem;">{{ part.usuario.nombre }}</strong>
+          <span class="muted" style="font-size: 0.85rem;">{{ part.area.nombre }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if solicitud.estado == 'Pendiente' and solicitud.solicitante_usuario_id == g.current_user.id %}
+  <div style="border-top: 1px solid #e4edf7; padding-top: 1.5rem; display: flex; justify-content: flex-end;">
+    <form method="post" action="/web/solicitudes/{{ solicitud.id }}/cancelar" onsubmit="return confirm('¿Está seguro de que desea cancelar esta solicitud?');">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+      <button type="submit" class="secondary" style="background: var(--danger-soft); color: var(--danger); border-color: var(--danger-soft); padding: 0.65rem 1.5rem; border-radius: 10px; font-weight: 700;">Cancelar Solicitud</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

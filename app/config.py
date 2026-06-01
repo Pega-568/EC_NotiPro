@@ -8,7 +8,7 @@ load_dotenv()
 class Config:
     APP_ENV = os.getenv("APP_ENV", "development")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///agenda.db")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "").strip()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
@@ -50,29 +50,53 @@ class Config:
     )
 
     @classmethod
-    def validate_runtime_or_raise(cls, debug_mode: str) -> None:
-        if cls.APP_ENV in ("production", "staging"):
-            secret_key = (cls.SECRET_KEY or "").strip()
+    def validate_runtime_or_raise(cls, debug_mode_or_config) -> None:
+        if hasattr(debug_mode_or_config, "get"):
+            app_config = debug_mode_or_config
+            debug_mode = app_config.get("debug_mode", "false")
+            db_uri = app_config.get("SQLALCHEMY_DATABASE_URI", "")
+            app_env = app_config.get("APP_ENV", "development")
+        else:
+            app_config = None
+            debug_mode = str(debug_mode_or_config)
+            db_uri = cls.SQLALCHEMY_DATABASE_URI
+            app_env = cls.APP_ENV
+
+        db_uri = (db_uri or "").strip()
+        if not db_uri:
+            if app_env == "testing":
+                raise RuntimeError("TEST_DATABASE_URL environment variable is required.")
+            else:
+                raise RuntimeError("DATABASE_URL environment variable is required.")
+
+        if "sqlite" in db_uri.lower():
+            raise RuntimeError("SQLite cannot be used in any environment.")
+
+        if app_env in ("production", "staging"):
+            secret_key = (app_config.get("SECRET_KEY") if app_config else cls.SECRET_KEY or "").strip()
             if not secret_key or secret_key in {"change-me", "change-me-in-production"}:
                 raise RuntimeError("Insecure SECRET_KEY for production.")
-            if "sqlite" in (cls.SQLALCHEMY_DATABASE_URI or "").lower():
-                raise RuntimeError("SQLite cannot be used in production.")
-            if not cls.SESSION_COOKIE_SECURE:
+            session_secure = app_config.get("SESSION_COOKIE_SECURE") if app_config else cls.SESSION_COOKIE_SECURE
+            if not session_secure:
                 raise RuntimeError("SESSION_COOKIE_SECURE must be True in production.")
-            internal_base_url = cls.INTERNAL_BASE_URL.lower()
+            internal_base_url = (app_config.get("INTERNAL_BASE_URL") if app_config else cls.INTERNAL_BASE_URL).lower()
             if "127.0.0.1" in internal_base_url or "localhost" in internal_base_url:
                 raise RuntimeError("INTERNAL_BASE_URL must not be local in production.")
-            if not cls.APP_ALLOWED_ORIGINS:
+            allowed_origins = app_config.get("APP_ALLOWED_ORIGINS") if app_config else cls.APP_ALLOWED_ORIGINS
+            if not allowed_origins:
                 raise RuntimeError("APP_ALLOWED_ORIGINS must not be empty in production.")
-            lowered_origins = [origin.lower() for origin in cls.APP_ALLOWED_ORIGINS]
+            lowered_origins = [origin.lower() for origin in allowed_origins]
             if any("127.0.0.1" in origin or "localhost" in origin for origin in lowered_origins):
                 raise RuntimeError("APP_ALLOWED_ORIGINS must not contain local hosts in production.")
-            if cls.FCM_ENABLED:
-                if not cls.FCM_SERVICE_ACCOUNT_PATH:
+            fcm_enabled = app_config.get("FCM_ENABLED") if app_config else cls.FCM_ENABLED
+            fcm_path = app_config.get("FCM_SERVICE_ACCOUNT_PATH") if app_config else cls.FCM_SERVICE_ACCOUNT_PATH
+            if fcm_enabled:
+                if not fcm_path:
                     raise RuntimeError("FCM_SERVICE_ACCOUNT_PATH is required when FCM_ENABLED=true.")
-                if not Path(cls.FCM_SERVICE_ACCOUNT_PATH).is_file():
+                if not Path(fcm_path).is_file():
                     raise RuntimeError("FCM_SERVICE_ACCOUNT_PATH does not exist.")
-            if cls.ALLOW_DEMO_SEED:
+            allow_demo = app_config.get("ALLOW_DEMO_SEED") if app_config else cls.ALLOW_DEMO_SEED
+            if allow_demo:
                 raise RuntimeError("ALLOW_DEMO_SEED must be False in production.")
             if debug_mode.lower() == "true":
                 raise RuntimeError("Debug mode must be disabled in production.")
@@ -81,7 +105,7 @@ class Config:
 class TestConfig(Config):
     APP_ENV = "testing"
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL", "").strip()
     WTF_CSRF_ENABLED = False
     SESSION_COOKIE_SECURE = False
     FCM_ENABLED = False
