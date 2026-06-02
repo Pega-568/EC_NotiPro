@@ -24,3 +24,8 @@ android/.gradle/
 htmlcov/
 build/
 dist/
+docs/evidence/
+*.png
+*.jpg
+*.jpeg
+*.webp

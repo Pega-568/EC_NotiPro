@@ -142,11 +142,42 @@ def test_secretaria_puede_ver_y_aprobar_solicitud(app):
         solicitud = create_meeting_request(payload, colaborador)
         assert solicitud.estado == "Pendiente"
 
-        reunion = approve_meeting_request(solicitud.id, secretaria)
+        reunion = approve_meeting_request(solicitud.id, secretaria, participante.id)
         assert reunion.id is not None
         assert reunion.titulo == "Solicitud para Aprobar"
         assert solicitud.estado == "Aprobada"
         assert solicitud.reunion_id == reunion.id
+
+
+def test_check_availability_rechaza_hora_invalida(app):
+    with app.app_context():
+        fecha = date.today() + timedelta(days=3)
+
+        with pytest.raises(ValidationError, match="hora_fin debe ser mayor"):
+            check_availability(fecha, time(11, 0), time(10, 0))
+
+
+def test_approve_meeting_request_requiere_responsable_reunion_id(app):
+    with app.app_context():
+        colaborador = Usuario.query.filter(Usuario.nombre == "Usuario 1").first()
+        secretaria = Usuario.query.filter(Usuario.nombre == "Admin").first()
+        zona = ZonaReunion.query.first()
+        participante = Usuario.query.filter(Usuario.nombre == "Usuario 2").first()
+
+        payload = {
+            "titulo": "Solicitud sin Responsable",
+            "motivo": "Debe exigir responsable",
+            "fecha": (date.today() + timedelta(days=3)).isoformat(),
+            "hora_inicio": "15:00",
+            "hora_fin": "16:00",
+            "zona_id": zona.id,
+            "participant_ids": [participante.id],
+        }
+
+        solicitud = create_meeting_request(payload, colaborador)
+
+        with pytest.raises(ValidationError, match="responsable"):
+            approve_meeting_request(solicitud.id, secretaria, None)
 
 
 def test_secretaria_puede_rechazar_solicitud(app):
@@ -249,4 +280,4 @@ def test_no_se_puede_aprobar_si_disponibilidad_cambio(app):
         create_meeting(meeting_payload)
 
         with pytest.raises(ConflictError):
-            approve_meeting_request(solicitud.id, secretaria)
+            approve_meeting_request(solicitud.id, secretaria, participante.id)

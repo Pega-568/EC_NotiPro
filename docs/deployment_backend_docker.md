@@ -34,26 +34,34 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 ```bash
 git clone https://github.com/Pega-568/EC_NotiPro.git
 cd EC_NotiPro
-git checkout feature/server-deployment-hardening
+git checkout feature/backend-audit-fixes
 ```
 
 ## 4. Crear `.env`
 
-Use `.env.docker.example` como base:
+Copie el ejemplo correspondiente al entorno:
 
 ```bash
-cp .env.docker.example .env
+# Para prueba Docker local
+cp .env.docker.local.example .env
+
+# Para produccion
+cp .env.docker.production.example .env
 ```
 
 Ajustes importantes:
 
+- Para prueba Docker local:
+  - `APP_ENV=development`
+  - `SESSION_COOKIE_SECURE=false`
+  - `APP_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1`
+  - `INTERNAL_BASE_URL=http://localhost:8000`
 - Para produccion real:
   - `SESSION_COOKIE_SECURE=true`
   - `APP_ALLOWED_ORIGINS=https://dominio-real`
   - `INTERNAL_BASE_URL=https://dominio-real`
   - `SECRET_KEY` fuerte
   - `POSTGRES_PASSWORD` fuerte
-- Para prueba Docker local se pueden usar valores temporales, pero si `APP_ENV=production` las validaciones siguen exigiendo orígenes y URL no locales.
 
 ## 5. Firebase service account
 

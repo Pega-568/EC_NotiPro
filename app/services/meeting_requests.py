@@ -47,6 +47,9 @@ def check_availability(
     usuario_ids: list[int] | None = None,
     exclude_solicitud_id: int | None = None,
 ) -> dict:
+    if hora_fin <= hora_inicio:
+        raise ValidationError("hora_fin debe ser mayor que hora_inicio.")
+
     start_dt = _combine(fecha, hora_inicio)
     end_dt = _combine(fecha, hora_fin)
 
@@ -268,7 +271,7 @@ def create_meeting_request(payload: dict, actor: Usuario) -> ReunionSolicitud:
     return solicitud
 
 
-def approve_meeting_request(request_id: int, actor: Usuario, responsable_reunion_id: int | None = None) -> Reunion:
+def approve_meeting_request(request_id: int, actor: Usuario, responsable_reunion_id: int | None) -> Reunion:
     if actor.role.nombre not in (ROLE_SECRETARIA, ROLE_ADMIN):
         raise ForbiddenError(
             "Solo el personal de Secretaría o Administradores pueden aprobar solicitudes."
@@ -283,6 +286,9 @@ def approve_meeting_request(request_id: int, actor: Usuario, responsable_reunion
 
     if solicitud.solicitante_usuario_id == actor.id:
         raise ForbiddenError("No puede aprobar su propia solicitud de reunión.")
+
+    if responsable_reunion_id is None:
+        raise ValidationError("Debe seleccionar un responsable de reunión.")
 
     # Pass exclude_solicitud_id to avoid blocking itself
     availability = check_availability(solicitud.fecha, solicitud.hora_inicio, solicitud.hora_fin, exclude_solicitud_id=solicitud.id)
@@ -299,25 +305,17 @@ def approve_meeting_request(request_id: int, actor: Usuario, responsable_reunion
                 f"El participante {p_avail['nombre'] if p_avail else p_id} ya no está disponible en este horario."
             )
 
-    # Determine responsable for the Reunion with secretary selection
-    if responsable_reunion_id is not None:
-        responsable = Usuario.query.get(responsable_reunion_id)
-        if not responsable or responsable.estado != "Activo":
-            raise ValidationError("El responsable de reunión seleccionado no está activo.")
-        if responsable.id not in participant_ids:
-            raise ValidationError("El responsable de la reunión debe estar incluido en la lista de participantes.")
-        responsable_id = responsable.id
-    else:
-        responsable_id = solicitud.solicitante_usuario_id
-        if responsable_id not in participant_ids:
-            # If the creator isn't a participant, set the first participant as responsable
-            responsable_id = participant_ids[0]
+    responsable = Usuario.query.get(responsable_reunion_id)
+    if not responsable or responsable.estado != "Activo":
+        raise ValidationError("El responsable de reunión seleccionado no está activo.")
+    if responsable.id not in participant_ids:
+        raise ValidationError("El responsable de la reunión debe estar incluido en la lista de participantes.")
 
     meeting = Reunion(
         titulo=solicitud.titulo,
         motivo=solicitud.motivo,
         creador_id=solicitud.solicitante_usuario_id,
-        responsable_reunion_id=responsable_id,
+        responsable_reunion_id=responsable.id,
         area_origen_id=solicitud.solicitante.area_id,
         zona_id=solicitud.zona_id,
         fecha=solicitud.fecha,
