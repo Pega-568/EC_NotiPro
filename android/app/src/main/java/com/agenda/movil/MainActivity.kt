@@ -6,6 +6,7 @@ import android.content.Context.MODE_PRIVATE
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -96,6 +97,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.google.gson.JsonParseException
+import com.google.gson.JsonSyntaxException
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -447,11 +449,9 @@ internal class MobileRepository(private val sessionStore: SessionStore) {
     }
 
     suspend fun login(correo: String, password: String): UserDto {
-        return handle {
-            val response = api().login(LoginRequest(correo.trim(), password))
-            sessionStore.saveToken(response.access_token)
-            response.user
-        }
+        val response = api().login(LoginRequest(correo.trim(), password))
+        sessionStore.saveToken(response.access_token)
+        return response.user
     }
     suspend fun me(): UserDto = handle { api().me().user }
     suspend fun logout() { runCatching { handle { api().logout() } }; sessionStore.clearToken() }
@@ -484,26 +484,26 @@ internal class MobileRepository(private val sessionStore: SessionStore) {
                 403 -> "No tiene permiso para realizar esta accion."
                 404 -> "Backend conectado, pero sincronizacion no disponible."
                 409 -> "Existe un conflicto con la agenda."
-                422 -> "Revise los datos ingresados."
+                422 -> "Credenciales invalidas."
                 else -> "El backend corporativo no respondio correctamente."
             }
             throw FriendlyException(message, "HTTP ${exc.code()} ${exc.message()}", backendStillConnected = exc.code() == 404)
         } catch (exc: UnauthorizedException) {
             throw exc
         } catch (exc: IllegalArgumentException) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         } catch (exc: UnknownHostException) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         } catch (exc: ConnectException) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         } catch (exc: SocketTimeoutException) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         } catch (exc: IOException) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         } catch (exc: JsonParseException) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         } catch (exc: Exception) {
-            throw FriendlyException("No se pudo conectar con el servidor. Verifique la URL o la red.", exc.message)
+            throw FriendlyException("No se pudo conectar con el servidor.", exc.message)
         }
     }
 }
@@ -616,12 +616,78 @@ private class CorporateAppViewModel(
     }
 
     fun login(correo: String, password: String) {
-        launchSafe {
-            require(correo.isNotBlank()) { "Ingrese su correo corporativo." }
-            require(password.isNotBlank()) { "Ingrese su contrasena." }
-            val user = repository.login(correo, password)
-            _uiState.value = _uiState.value.copy(currentUser = user, screen = Screen.SYNCING)
-            syncNow()
+        viewModelScope.launch {
+            Log.d("EC_NOTIPRO_LOGIN", "login start baseUrl=${sessionStore.baseUrl()}")
+            _uiState.value = _uiState.value.copy(isLoading = true, technicalMessage = null)
+            try {
+                require(correo.isNotBlank()) { "Ingrese su correo corporativo." }
+                require(password.isNotBlank()) { "Ingrese su contrasena." }
+                val user = repository.login(correo, password)
+                Log.d("EC_NOTIPRO_LOGIN", "login ok user=${user.correo}")
+
+                Log.d("EC_NOTIPRO_LOGIN", "loadCache start")
+                val cacheLoaded = runCatching { loadCache() }
+                    .onSuccess { Log.d("EC_NOTIPRO_LOGIN", "loadCache ok") }
+                    .onFailure { Log.e("EC_NOTIPRO_LOGIN", "loadCache failed", it) }
+                    .isSuccess
+
+                val backendHealthy = isNetworkAvailable(appContext) && repository.isBackendHealthy()
+                Log.d("EC_NOTIPRO_LOGIN", "navigate dashboard backendHealthy=$backendHealthy cacheLoaded=$cacheLoaded")
+                _uiState.value = _uiState.value.copy(
+                    currentUser = user,
+                    screen = Screen.DASHBOARD,
+                    isOnline = isNetworkAvailable(appContext),
+                    isCorporateApiAvailable = backendHealthy,
+                    message = if (cacheLoaded) {
+                        "Sesion iniciada. Sincronizacion movil pendiente."
+                    } else {
+                        "Sesion iniciada. Cache local pendiente."
+                    },
+                    technicalMessage = null,
+                )
+            } catch (exc: HttpException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                val message = if (exc.code() == 401 || exc.code() == 403) {
+                    "Credenciales invalidas."
+                } else {
+                    "Login fallo: HTTP ${exc.code()}"
+                }
+                _uiState.value = _uiState.value.copy(message = message, technicalMessage = "HTTP ${exc.code()} ${exc.message()}")
+            } catch (exc: ConnectException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = "No se pudo conectar con el servidor.", technicalMessage = exc.stackTraceToString())
+            } catch (exc: UnknownHostException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = "No se pudo conectar con el servidor.", technicalMessage = exc.stackTraceToString())
+            } catch (exc: SocketTimeoutException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = "No se pudo conectar con el servidor.", technicalMessage = exc.stackTraceToString())
+            } catch (exc: IOException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = "No se pudo conectar con el servidor.", technicalMessage = exc.stackTraceToString())
+            } catch (exc: JsonSyntaxException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = "Respuesta de login incompatible.", technicalMessage = exc.stackTraceToString())
+            } catch (exc: JsonParseException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = "Respuesta de login incompatible.", technicalMessage = exc.stackTraceToString())
+            } catch (exc: FriendlyException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = exc.message, technicalMessage = exc.technical)
+            } catch (exc: IllegalArgumentException) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                _uiState.value = _uiState.value.copy(message = exc.message, technicalMessage = exc.stackTraceToString())
+            } catch (exc: Exception) {
+                Log.e("EC_NOTIPRO_LOGIN", "login failed", exc)
+                val message = if (BuildConfig.DEBUG_UI) {
+                    "Error interno login: ${exc::class.java.simpleName}"
+                } else {
+                    "No se pudo conectar con el servidor."
+                }
+                _uiState.value = _uiState.value.copy(message = message, technicalMessage = exc.stackTraceToString())
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false, isOnline = isNetworkAvailable(appContext))
+            }
         }
     }
 
@@ -990,6 +1056,9 @@ private fun LoginScreen(uiState: AppUiState, viewModel: CorporateAppViewModel) {
             }
             SecondaryButton("Entrar en modo offline") { viewModel.enterOfflineMode() }
             Text("Servidor: ${uiState.baseUrl}", style = MaterialTheme.typography.bodySmall, color = ecuDarkGray)
+            if (BuildConfig.DEBUG_UI && uiState.technicalMessage != null) {
+                Text("Diagnostico: ${uiState.technicalMessage}", style = MaterialTheme.typography.bodySmall, color = danger)
+            }
         }
     }
 }
