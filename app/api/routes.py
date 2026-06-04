@@ -13,6 +13,7 @@ from app.models import (
     LogSistema,
     Reunion,
     ReunionHistorial,
+    ReunionSolicitud,
     Role,
     Usuario,
     ZonaReunion,
@@ -58,6 +59,26 @@ def _zone_payload(zone: ZonaReunion) -> dict:
         "descripcion": zone.descripcion,
         "created_at": zone.created_at.isoformat(),
         "updated_at": zone.updated_at.isoformat(),
+    }
+
+
+def _mobile_user_payload(user: Usuario) -> dict:
+    return {
+        "id": user.id,
+        "nombre": user.nombre,
+        "correo": user.correo,
+        "estado": user.estado,
+        "role": user.role.nombre,
+        "area": {"id": user.area.id, "nombre": user.area.nombre},
+    }
+
+
+def _mobile_zone_payload(zone: ZonaReunion) -> dict:
+    return {
+        "id": zone.id,
+        "nombre": zone.nombre,
+        "ubicacion": zone.ubicacion,
+        "capacidad": zone.capacidad,
     }
 
 
@@ -111,6 +132,44 @@ def _mobile_meeting_payload(meeting: Reunion, viewer: Usuario) -> dict:
             for item in meeting.participantes
         ],
     }
+
+
+def _mobile_visible_meetings(actor: Usuario) -> list[Reunion]:
+    if actor.role.nombre in OPERATOR_ROLES:
+        return Reunion.query.order_by(Reunion.fecha.asc(), Reunion.hora_inicio.asc()).all()
+    return (
+        Reunion.query.filter(Reunion.participantes.any(usuario_id=actor.id))
+        .order_by(Reunion.fecha.asc(), Reunion.hora_inicio.asc())
+        .all()
+    )
+
+
+def _mobile_request_payload(solicitud: ReunionSolicitud) -> dict:
+    return {
+        "id": solicitud.id,
+        "titulo": solicitud.titulo,
+        "motivo": solicitud.motivo,
+        "fecha": solicitud.fecha.isoformat(),
+        "hora_inicio": solicitud.hora_inicio.strftime("%H:%M"),
+        "hora_fin": solicitud.hora_fin.strftime("%H:%M"),
+        "estado": solicitud.estado,
+        "prioridad": solicitud.prioridad,
+        "observacion_solicitante": solicitud.observacion_solicitante,
+        "respuesta_secretaria": solicitud.respuesta_secretaria,
+        "reunion_id": solicitud.reunion_id,
+        "solicitante": _mobile_user_payload(solicitud.solicitante),
+        "zona": _mobile_zone_payload(solicitud.zona),
+        "participantes": [_mobile_user_payload(item.usuario) for item in solicitud.participantes],
+        "created_at": solicitud.created_at.isoformat(),
+        "updated_at": solicitud.updated_at.isoformat(),
+    }
+
+
+def _mobile_visible_requests(actor: Usuario) -> list[ReunionSolicitud]:
+    query = ReunionSolicitud.query.order_by(ReunionSolicitud.created_at.desc())
+    if actor.role.nombre in (ROLE_ADMIN, ROLE_SECRETARIA):
+        return query.all()
+    return query.filter_by(solicitante_usuario_id=actor.id).all()
 
 
 def _get_login_user(payload: dict, channel: str) -> Usuario:
@@ -187,7 +246,7 @@ def mobile_login():
             "token_type": "Bearer",
             "expires_in_minutes": current_app.config["SESSION_TTL_MINUTES"],
             "csrf_token": csrf_token,
-            "user": _user_payload(user),
+            "user": _mobile_user_payload(user),
         }
     )
 
@@ -195,7 +254,7 @@ def mobile_login():
 @api_bp.get("/mobile/auth/me")
 @require_auth()
 def mobile_me():
-    return jsonify({"user": _user_payload(g.current_user)})
+    return jsonify({"user": _mobile_user_payload(g.current_user)})
 
 
 @api_bp.post("/mobile/auth/logout")
@@ -418,6 +477,29 @@ def list_zones():
     return jsonify({"items": [_zone_payload(zone) for zone in zones]})
 
 
+@api_bp.get("/mobile/zonas")
+@require_auth()
+def mobile_zones():
+    zones = ZonaReunion.query.filter_by(estado="Activa").order_by(ZonaReunion.nombre).all()
+    return jsonify({"items": [_mobile_zone_payload(zone) for zone in zones]})
+
+
+@api_bp.get("/mobile/usuarios/buscar")
+@require_auth()
+def mobile_search_users():
+    q = (request.args.get("q") or "").strip().lower()
+    area_id_raw = request.args.get("area_id")
+    area_id = int(area_id_raw) if area_id_raw else None
+    query = Usuario.query.filter_by(estado="Activo")
+    if area_id:
+        query = query.filter_by(area_id=area_id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter((Usuario.nombre.ilike(like)) | (Usuario.correo.ilike(like)))
+    users = query.order_by(Usuario.nombre).limit(20).all()
+    return jsonify({"items": [_mobile_user_payload(user) for user in users]})
+
+
 @api_bp.post("/zonas")
 @require_roles(ROLE_ADMIN)
 def create_zone():
@@ -550,15 +632,30 @@ def reject_meeting_route(meeting_id: int):
 @require_auth()
 def mobile_meetings():
     actor = g.current_user
-    if actor.role.nombre in OPERATOR_ROLES:
-        meetings = Reunion.query.order_by(Reunion.fecha.asc(), Reunion.hora_inicio.asc()).all()
-    else:
-        meetings = (
-            Reunion.query.filter(Reunion.participantes.any(usuario_id=actor.id))
-            .order_by(Reunion.fecha.asc(), Reunion.hora_inicio.asc())
-            .all()
-        )
+    meetings = _mobile_visible_meetings(actor)
     return jsonify({"items": [_mobile_meeting_payload(meeting, actor) for meeting in meetings]})
+
+
+@api_bp.get("/mobile/sync")
+@require_auth()
+def mobile_sync():
+    actor = g.current_user
+    meetings = _mobile_visible_meetings(actor)
+    solicitudes = _mobile_visible_requests(actor)
+    return jsonify(
+        {
+            "reuniones": [_mobile_meeting_payload(meeting, actor) for meeting in meetings],
+            "solicitudes": [_mobile_request_payload(solicitud) for solicitud in solicitudes],
+            "server_time": datetime.utcnow().isoformat() + "Z",
+        }
+    )
+
+
+@api_bp.get("/mobile/solicitudes")
+@require_auth()
+def mobile_requests():
+    solicitudes = _mobile_visible_requests(g.current_user)
+    return jsonify({"items": [_mobile_request_payload(solicitud) for solicitud in solicitudes]})
 
 
 @api_bp.get("/mobile/reuniones/<int:meeting_id>")

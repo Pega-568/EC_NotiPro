@@ -1,6 +1,8 @@
 from datetime import date, timedelta
 
+from app.models import Usuario, ZonaReunion
 from app.services.notifications import dispatch_pending_notifications
+from app.services.meeting_requests import create_meeting_request
 
 
 def mobile_login(client, correo, password):
@@ -55,6 +57,65 @@ def test_mobile_reuniones_lista_solo_propias(client):
     items = response.get_json()["items"]
     assert len(items) == 1
     assert items[0]["mi_respuesta"] == "Pendiente"
+
+
+def test_mobile_zonas_devuelve_contrato_minimo(client):
+    headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+    response = client.get("/api/mobile/zonas", headers=headers)
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert items
+    assert {"id", "nombre", "ubicacion", "capacidad"} == set(items[0])
+    assert items[0]["capacidad"] > 0
+
+
+def test_mobile_buscar_usuarios_devuelve_area_y_role(client):
+    headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+    response = client.get("/api/mobile/usuarios/buscar?q=usuario", headers=headers)
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert items
+    assert {"id", "nombre", "correo", "estado", "role", "area"} == set(items[0])
+    assert {"id", "nombre"} == set(items[0]["area"])
+
+
+def test_mobile_solicitudes_lista_propias(client, app):
+    with app.app_context():
+        solicitante = Usuario.query.filter_by(correo="usuario1.contabilidad@empresa.local").first()
+        participante = Usuario.query.filter_by(correo="usuario2.contabilidad@empresa.local").first()
+        zona = ZonaReunion.query.first()
+        create_meeting_request(
+            {
+                "titulo": "Solicitud movil",
+                "motivo": "Revision desde app movil",
+                "fecha": (date.today() + timedelta(days=2)).isoformat(),
+                "hora_inicio": "14:00",
+                "hora_fin": "15:00",
+                "zona_id": zona.id,
+                "participant_ids": [participante.id],
+            },
+            solicitante,
+        )
+
+    headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+    response = client.get("/api/mobile/solicitudes", headers=headers)
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert len(items) == 1
+    assert items[0]["titulo"] == "Solicitud movil"
+    assert items[0]["zona"]["capacidad"] > 0
+    assert items[0]["solicitante"]["area"]["nombre"] == "Contabilidad"
+
+
+def test_mobile_sync_devuelve_reuniones_y_solicitudes(client):
+    headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+    response = client.get("/api/mobile/sync", headers=headers)
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert set(payload) == {"reuniones", "solicitudes", "server_time"}
+    assert isinstance(payload["reuniones"], list)
+    assert isinstance(payload["solicitudes"], list)
+    assert payload["server_time"]
 
 
 def test_mobile_detalle_aceptar_y_rechazar(client):
