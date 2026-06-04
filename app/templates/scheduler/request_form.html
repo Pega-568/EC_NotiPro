@@ -111,7 +111,7 @@
           <select id="participantRole" aria-label="Filtrar participantes por rol">
             <option value="">Todos los roles</option>
             {% for role in roles|unique(attribute='id') %}
-            <option value="{{ role.nombre }}">{{ role.nombre }}</option>
+            <option value="{{ role.nombre }}">{{ role.nombre|role_label }}</option>
             {% endfor %}
           </select>
         </div>
@@ -123,7 +123,7 @@
             <input type="checkbox" name="participant_ids" value="{{ user.id }}" id="chk-{{ user.id }}">
             <span class="select-card-main">
               <span class="select-card-title">{{ user.nombre }}</span>
-              <span class="select-card-meta">{{ user.correo }} · {{ user.area.nombre }} · {{ user.role.nombre }}</span>
+              <span class="select-card-meta">{{ user.correo }} · {{ user.area.nombre }} · {{ user.role.nombre|role_label }}</span>
               <span class="badge success availability-badge">Disponible</span>
               <span class="select-card-reason status-label"></span>
             </span>

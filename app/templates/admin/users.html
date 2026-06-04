@@ -14,7 +14,7 @@
         <td>{{ user.nombre }}</td>
         <td>{{ user.correo }}</td>
         <td>{{ user.telefono or "-" }}</td>
-        <td>{{ user.role.nombre }}</td>
+        <td>{{ user.role.nombre|role_label }}</td>
         <td>{{ user.area.nombre }}</td>
         <td><span class="badge">{{ user.estado }}</span></td>
         <td>

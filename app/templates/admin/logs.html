@@ -9,7 +9,7 @@
       <tr>
         <td>{{ log.fecha_hora }}</td>
         <td>{{ log.descripcion_humana or "-" }}</td>
-        <td>{{ log.usuario_actor.nombre if log.usuario_actor else "Sistema" }}{% if log.rol_actor %}<br><span class="badge">{{ log.rol_actor }}</span>{% endif %}</td>
+        <td>{{ log.usuario_actor.nombre if log.usuario_actor else "Sistema" }}{% if log.rol_actor %}<br><span class="badge">{{ log.rol_actor|role_label }}</span>{% endif %}</td>
         <td>{{ log.resultado }}</td>
         <td>{{ log.ip or "-" }}<br>{{ log.user_agent or "-" }}</td>
         <td>

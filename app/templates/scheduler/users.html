@@ -6,10 +6,9 @@
     <thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead>
     <tbody>
       {% for user in users %}
-      <tr><td>{{ user.id }}</td><td>{{ user.nombre }}</td><td>{{ user.correo }}</td><td>{{ user.role.nombre }}</td><td>{{ user.estado }}</td></tr>
+      <tr><td>{{ user.id }}</td><td>{{ user.nombre }}</td><td>{{ user.correo }}</td><td>{{ user.role.nombre|role_label }}</td><td>{{ user.estado }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
 {% endblock %}
-

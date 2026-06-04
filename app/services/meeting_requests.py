@@ -175,7 +175,7 @@ def check_availability(
 def create_meeting_request(payload: dict, actor: Usuario) -> ReunionSolicitud:
     if actor.role.nombre not in (ROLE_AGENDADOR, ROLE_COLABORADOR):
         raise ForbiddenError(
-            "Solo Agendadores de área y Colaboradores pueden crear solicitudes de reunión."
+            "Solo Encargados de Área y Colaboradores pueden crear solicitudes de reunión."
         )
 
     required = ("titulo", "motivo", "zona_id", "fecha", "hora_inicio", "hora_fin", "participant_ids")
@@ -203,7 +203,7 @@ def create_meeting_request(payload: dict, actor: Usuario) -> ReunionSolicitud:
     if actor.role.nombre == ROLE_AGENDADOR:
         for p in participants:
             if p.area_id != actor.area_id:
-                raise ForbiddenError("El Agendador de área solo puede invitar a personas de su área.")
+                raise ForbiddenError("El Encargado de Área solo puede invitar a personas de su área.")
 
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
@@ -225,7 +225,7 @@ def create_meeting_request(payload: dict, actor: Usuario) -> ReunionSolicitud:
 
     if actor.role.nombre == ROLE_AGENDADOR and zone.area_id not in (actor.area_id, None):
         raise ForbiddenError(
-            "El Agendador de área solo puede crear solicitudes para zonas de su área o globales."
+            "El Encargado de Área solo puede crear solicitudes para zonas de su área o globales."
         )
 
     # Validate availability in real time

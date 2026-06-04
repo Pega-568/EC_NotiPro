@@ -79,7 +79,7 @@ def test_agendador_area_restrictions(app, base_data, monkeypatch):
             "participant_ids": [base_data["u_colab1_id"], base_data["u_colab2_id"]],
             "responsable_reunion_id": base_data["u_colab1_id"]
         }
-        with pytest.raises(ForbiddenError, match="El Agendador de área solo puede invitar a personas de su área."):
+        with pytest.raises(ForbiddenError, match="El Encargado de Área solo puede invitar a personas de su área."):
             create_meeting(payload_wrong_user)
                 
         payload_wrong_zone = {
@@ -88,7 +88,7 @@ def test_agendador_area_restrictions(app, base_data, monkeypatch):
             "participant_ids": [base_data["u_colab1_id"]],
             "responsable_reunion_id": base_data["u_colab1_id"]
         }
-        with pytest.raises(ForbiddenError, match="El Agendador de área solo puede crear reuniones en zonas de su área o zonas globales."):
+        with pytest.raises(ForbiddenError, match="El Encargado de Área solo puede crear reuniones en zonas de su área o zonas globales."):
             create_meeting(payload_wrong_zone)
 
 

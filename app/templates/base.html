@@ -8,6 +8,7 @@
 </head>
 <body>
   {% set role_name = g.current_user.role.nombre if g.current_user else "" %}
+  {% set role_display_name = role_name|role_label %}
   {% set current_path = request.path %}
   <div class="app-shell" data-app-shell>
     {% if g.current_user %}
@@ -67,7 +68,7 @@
             <button type="button" class="user-menu-button btn-outline" data-user-menu-button aria-haspopup="true" aria-expanded="false">
               <span class="user-meta">
                 <strong>{{ g.current_user.nombre }}</strong>
-                <span>{{ role_name }}</span>
+                <span>{{ role_display_name }}</span>
               </span>
               <span aria-hidden="true">⌄</span>
             </button>
@@ -75,7 +76,7 @@
               <div class="info-card" style="margin-bottom: 0.5rem;">
                 <strong>{{ g.current_user.nombre }}</strong>
                 <div class="muted">{{ g.current_user.correo }}</div>
-                <span class="badge">{{ role_name }}</span>
+                <span class="badge">{{ role_display_name }}</span>
               </div>
               <form method="post" action="/logout" data-confirm="¿Desea cerrar la sesión actual?">
                 <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">

@@ -267,7 +267,7 @@ def create_meeting(payload: dict) -> Reunion:
     if actor.role.nombre == ROLE_AGENDADOR:
         for participant in participants:
             if participant.area_id != actor.area_id:
-                raise ForbiddenError("El Agendador de área solo puede invitar a personas de su área.")
+                raise ForbiddenError("El Encargado de Área solo puede invitar a personas de su área.")
 
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
@@ -276,7 +276,7 @@ def create_meeting(payload: dict) -> Reunion:
     zone = _find_zone(int(payload["zona_id"]))
     
     if actor.role.nombre == ROLE_AGENDADOR and zone.area_id not in (actor.area_id, None):
-        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área o zonas globales.")
+        raise ForbiddenError("El Encargado de Área solo puede crear reuniones en zonas de su área o zonas globales.")
         
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin)
     participant_conflict_ids = list({responsable.id, *participant_ids})
@@ -357,7 +357,7 @@ def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
     if actor.role.nombre == ROLE_AGENDADOR:
         for participant in participants:
             if participant.area_id != actor.area_id:
-                raise ForbiddenError("El Agendador de área solo puede invitar a personas de su área.")
+                raise ForbiddenError("El Encargado de Área solo puede invitar a personas de su área.")
     fecha = date.fromisoformat(payload["fecha"])
     hora_inicio = datetime.strptime(payload["hora_inicio"], "%H:%M").time()
     hora_fin = datetime.strptime(payload["hora_fin"], "%H:%M").time()
@@ -365,7 +365,7 @@ def update_meeting(meeting: Reunion, payload: dict) -> Reunion:
     zone = _find_zone(int(payload["zona_id"]))
     
     if actor.role.nombre == ROLE_AGENDADOR and zone.area_id not in (actor.area_id, None):
-        raise ForbiddenError("El Agendador de área solo puede crear reuniones en zonas de su área o zonas globales.")
+        raise ForbiddenError("El Encargado de Área solo puede crear reuniones en zonas de su área o zonas globales.")
         
     _validate_zone_conflicts(zone, fecha, hora_inicio, hora_fin, meeting_id=meeting.id)
     participant_conflict_ids = list({responsable.id, *participant_ids})

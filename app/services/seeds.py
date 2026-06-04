@@ -85,7 +85,7 @@ def seed_demo_users(seed_context: dict[str, object]) -> None:
             areas["Contabilidad"].id,
         ),
         (
-            "Agendador Contabilidad",
+            "Encargado Contabilidad",
             "agendador.contabilidad@empresa.local",
             "Agenda123!",
             roles["agendador"].id,

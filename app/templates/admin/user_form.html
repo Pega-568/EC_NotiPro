@@ -12,7 +12,7 @@
         <select name="role_id" required>
           <option value="">Seleccione</option>
           {% for role in roles %}
-          <option value="{{ role.id }}" {% if form_data.role_id|string == role.id|string %}selected{% endif %}>{{ role.nombre }}</option>
+          <option value="{{ role.id }}" {% if form_data.role_id|string == role.id|string %}selected{% endif %}>{{ role.nombre|role_label }}</option>
           {% endfor %}
         </select>
       </label>
@@ -41,4 +41,3 @@
   </form>
 </section>
 {% endblock %}
-

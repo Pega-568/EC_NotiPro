@@ -1,6 +1,9 @@
 from datetime import date, timedelta
 
-from app.models import Area, LogSistema, Reunion, Usuario
+from app.constants import ROLE_AGENDADOR
+from app.extensions import db
+from app.models import Area, LogSistema, Reunion, Role, Usuario
+from app.security import hash_password
 
 
 def future_day():
@@ -27,6 +30,32 @@ def test_admin_puede_ver_lista_usuarios(client):
     response = client.get("/web/admin/usuarios")
     assert response.status_code == 200
     assert "admin@empresa.local" in response.get_data(as_text=True)
+
+
+def test_web_muestra_agendador_como_encargado_area(client, app):
+    with app.app_context():
+        role = Role.query.filter_by(nombre=ROLE_AGENDADOR).first()
+        if not role:
+            role = Role(nombre=ROLE_AGENDADOR)
+            db.session.add(role)
+            db.session.flush()
+        db.session.add(
+            Usuario(
+                nombre="Encargado Visual",
+                correo="encargado.visual@empresa.local",
+                telefono="0991112222",
+                password_hash=hash_password("Encargado123!"),
+                role_id=role.id,
+                area_id=1,
+            )
+        )
+        db.session.commit()
+
+    web_login(client)
+    list_body = client.get("/web/admin/usuarios").get_data(as_text=True)
+    form_body = client.get("/web/admin/usuarios/nuevo").get_data(as_text=True)
+    assert "Encargado de Área" in list_body
+    assert "Encargado de Área" in form_body
 
 
 def test_admin_puede_crear_usuario(client, app):

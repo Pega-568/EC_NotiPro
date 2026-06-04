@@ -1,6 +1,9 @@
 from datetime import date, timedelta
 
-from app.models import Area, LogSistema, NotificationEvent, Reunion, Usuario, ZonaReunion
+from app.constants import ROLE_AGENDADOR
+from app.extensions import db
+from app.models import Area, LogSistema, NotificationEvent, Reunion, Role, Usuario, ZonaReunion
+from app.security import hash_password
 
 
 def login(client, correo, password):
@@ -25,6 +28,28 @@ def _meeting_payload(participant_ids, zone_id=1, start="09:00", end="10:00", res
         "participant_ids": participant_ids,
         "responsable_reunion_id": responsible_id or participant_ids[0],
     }
+
+
+def ensure_agendador(client, app):
+    with app.app_context():
+        role = Role.query.filter_by(nombre=ROLE_AGENDADOR).first()
+        if not role:
+            role = Role(nombre=ROLE_AGENDADOR)
+            db.session.add(role)
+            db.session.flush()
+        user = Usuario.query.filter_by(correo="encargado.contabilidad@empresa.local").first()
+        if not user:
+            user = Usuario(
+                nombre="Encargado Contabilidad",
+                correo="encargado.contabilidad@empresa.local",
+                telefono="0990000008",
+                password_hash=hash_password("Encargado123!"),
+                role_id=role.id,
+                area_id=1,
+            )
+            db.session.add(user)
+            db.session.commit()
+    return login(client, "encargado.contabilidad@empresa.local", "Encargado123!")
 
 
 def test_admin_crea_area(client, app):
@@ -69,9 +94,20 @@ def test_admin_crea_reunion_multiarea(client, app):
 
 
 def test_agendador_crea_reunion_misma_area(client, app):
-    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
+    headers = ensure_agendador(client, app)
     response = client.post("/api/reuniones", json=_meeting_payload([3, 4], zone_id=2), headers=headers)
     assert response.status_code == 201
+
+
+def test_agendador_no_crea_reunion_con_participante_otra_area(client, app):
+    headers = ensure_agendador(client, app)
+    response = client.post(
+        "/api/reuniones",
+        json=_meeting_payload([3, 5], zone_id=2, responsible_id=3),
+        headers=headers,
+    )
+    assert response.status_code == 403
+    assert "área" in response.get_json()["message"]
 
 
 def test_secretaria_puede_convocar_otra_area(client, app):

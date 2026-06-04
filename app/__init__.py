@@ -5,7 +5,7 @@ from sqlalchemy import text
 from flask import Flask, jsonify, request
 
 from app.config import Config, TestConfig
-from app.constants import ROLE_ADMIN
+from app.constants import ROLE_ADMIN, display_role_name
 from app.extensions import db, migrate
 from app.models import Area, Role, Usuario
 from app.security import hash_password
@@ -33,6 +33,7 @@ def create_app(config_object=None) -> Flask:
 
     db.init_app(app)
     migrate.init_app(app, db)
+    app.jinja_env.filters["role_label"] = display_role_name
 
     @app.before_request
     def before_request():
