@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from app.config import Config, TestConfig
 from app.constants import ROLE_ADMIN, display_role_name
@@ -77,6 +78,19 @@ def create_app(config_object=None) -> Flask:
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception):
+        if isinstance(exc, HTTPException):
+            if request.path.startswith("/api/"):
+                return (
+                    jsonify(
+                        {
+                            "error": exc.name.lower().replace(" ", "_"),
+                            "message": exc.description,
+                        }
+                    ),
+                    exc.code or 500,
+                )
+            return jsonify({"error": exc.description}), exc.code or 500
+
         db.session.rollback()
         try:
             log_event("error_sistema", "backend", "fallido", detail={"ruta": request.path, "error": str(exc)})
