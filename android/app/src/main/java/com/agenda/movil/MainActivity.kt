@@ -87,6 +87,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -208,6 +209,29 @@ internal data class LoginResponse(val access_token: String, val token_type: Stri
 internal data class MeResponse(val user: UserDto)
 internal data class RejectRequest(val razon: String)
 internal data class DeviceTokenRequest(val token: String, val app_version: String, val debug_ui: Boolean)
+internal data class UserAvailabilityResponse(
+    val fecha: String,
+    val usuarios_no_encontrados: List<Int> = emptyList(),
+    val usuarios: List<UserAvailabilityDto> = emptyList()
+)
+internal data class UserAvailabilityDto(
+    val id: Int,
+    val nombre: String,
+    val correo: String,
+    val area: AreaDto,
+    val reuniones_dia: Int,
+    val estado_dia: String,
+    val bloques: List<AvailabilityBlockDto> = emptyList()
+)
+internal data class AvailabilityBlockDto(
+    val reunion_id: Int,
+    val titulo: String,
+    val inicio: String,
+    val fin: String,
+    val estado: String,
+    val tipo: String,
+    val prioridad: String
+)
 
 private interface MobileApi {
     @POST("/api/mobile/auth/login")
@@ -233,6 +257,12 @@ private interface MobileApi {
 
     @POST("/api/mobile/device-token")
     suspend fun registerDeviceToken(@Body request: DeviceTokenRequest): Map<String, String>
+
+    @GET("/api/mobile/disponibilidad/usuarios")
+    suspend fun userAvailability(
+        @Query("fecha") fecha: String,
+        @Query("usuario_ids") usuarioIds: String
+    ): UserAvailabilityResponse
 }
 
 private class UnauthorizedException : RuntimeException()
@@ -291,6 +321,8 @@ internal class MobileRepository(private val sessionStore: SessionStore) {
     suspend fun meetingDetail(id: Int): MeetingDto = handleUnauthorized { api().meetingDetail(id) }
     suspend fun accept(id: Int): MeetingDto = handleUnauthorized { api().accept(id) }
     suspend fun reject(id: Int, reason: String): MeetingDto = handleUnauthorized { api().reject(id, RejectRequest(reason)) }
+    suspend fun userAvailability(fecha: String, userIds: List<Int>): UserAvailabilityResponse =
+        handleUnauthorized { api().userAvailability(fecha, userIds.distinct().joinToString(",")) }
     suspend fun registerDeviceToken(token: String) {
         handleUnauthorized {
             api().registerDeviceToken(
@@ -354,6 +386,8 @@ private data class AppUiState(
     val errorMessage: String? = null,
     val lastTechnicalError: String? = null,
     val pushStatus: String? = null,
+    val availabilityByUser: Map<Int, UserAvailabilityDto> = emptyMap(),
+    val availabilityMessage: String? = null,
 )
 
 private class AppViewModel(private val sessionStore: SessionStore) : ViewModel() {
@@ -411,7 +445,13 @@ private class AppViewModel(private val sessionStore: SessionStore) : ViewModel()
     fun openMeeting(id: Int) {
         launchSafe {
             val detail = repository.meetingDetail(id)
-            _uiState.value = _uiState.value.copy(selectedMeeting = detail, currentScreen = Screen.DETAIL)
+            _uiState.value = _uiState.value.copy(
+                selectedMeeting = detail,
+                currentScreen = Screen.DETAIL,
+                availabilityByUser = emptyMap(),
+                availabilityMessage = null,
+            )
+            refreshAvailabilityForParticipants(detail)
         }
     }
 
@@ -420,6 +460,7 @@ private class AppViewModel(private val sessionStore: SessionStore) : ViewModel()
             val detail = repository.accept(id)
             replaceMeeting(detail)
             _uiState.value = _uiState.value.copy(selectedMeeting = detail, currentScreen = Screen.DETAIL)
+            refreshAvailabilityForParticipants(detail)
         }
     }
 
@@ -431,6 +472,7 @@ private class AppViewModel(private val sessionStore: SessionStore) : ViewModel()
             val detail = repository.reject(id, reason)
             replaceMeeting(detail)
             _uiState.value = _uiState.value.copy(selectedMeeting = detail, currentScreen = Screen.DETAIL)
+            refreshAvailabilityForParticipants(detail)
         }
     }
 
@@ -456,6 +498,29 @@ private class AppViewModel(private val sessionStore: SessionStore) : ViewModel()
         val index = updated.indexOfFirst { it.id == detail.id }
         if (index >= 0) updated[index] = detail else updated.add(detail)
         _uiState.value = _uiState.value.copy(meetings = updated.sortedBy { it.localDate().toString() + it.hora_inicio })
+    }
+
+    private fun refreshAvailabilityForParticipants(meeting: MeetingDto) {
+        val userIds = meeting.participantes.map { it.usuario_id }.distinct()
+        if (userIds.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val response = repository.userAvailability(meeting.fecha, userIds)
+                _uiState.value = _uiState.value.copy(
+                    availabilityByUser = response.usuarios.associateBy { it.id },
+                    availabilityMessage = if (response.usuarios_no_encontrados.isNotEmpty()) {
+                        "No se encontró disponibilidad para algunos participantes."
+                    } else {
+                        null
+                    }
+                )
+            } catch (exc: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    availabilityMessage = "No fue posible consultar disponibilidad. Puede continuar y actualizar más tarde.",
+                    lastTechnicalError = exc.message,
+                )
+            }
+        }
     }
 
     private fun launchSafe(block: suspend () -> Unit) {
@@ -1039,12 +1104,29 @@ private fun MeetingDetailScreen(uiState: AppUiState, viewModel: AppViewModel) {
             }
         }
         SectionHeader("Participantes")
+        uiState.availabilityMessage?.let { message ->
+            Surface(shape = RoundedCornerShape(18.dp), color = pendingColor.copy(alpha = 0.22f)) {
+                Text(message, modifier = Modifier.padding(14.dp), color = ecuText)
+            }
+        }
+        if (availabilityHasConflict(uiState.availabilityByUser.values, meeting.hora_inicio, meeting.hora_fin, meeting.id)) {
+            Surface(shape = RoundedCornerShape(18.dp), color = pendingColor.copy(alpha = 0.26f)) {
+                Text(
+                    "Uno o más participantes tienen reuniones en ese horario. Secretaría verá el conflicto al revisar la solicitud.",
+                    modifier = Modifier.padding(14.dp),
+                    color = ecuText
+                )
+            }
+        }
         meeting.participantes.forEach { participant ->
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, ecuBorder)) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(participant.nombre, fontWeight = FontWeight.Bold, color = ecuText)
                     Text(participant.correo, color = ecuText)
                     StatusPill(participant.estado_respuesta)
+                    uiState.availabilityByUser[participant.usuario_id]?.let { availability ->
+                        ParticipantAvailabilityBlock(availability)
+                    }
                     if (!participant.razon_rechazo.isNullOrBlank()) {
                         Text("Razón: ${participant.razon_rechazo}", style = MaterialTheme.typography.bodySmall, color = ecuText)
                     }
@@ -1052,6 +1134,29 @@ private fun MeetingDetailScreen(uiState: AppUiState, viewModel: AppViewModel) {
                         Text("ID participante: ${participant.usuario_id}", style = MaterialTheme.typography.bodySmall, color = ecuBlueLight)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParticipantAvailabilityBlock(availability: UserAvailabilityDto) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "${availabilityStatusLabel(availability.estado_dia)} · ${availability.reuniones_dia} reuniones del día",
+            style = MaterialTheme.typography.bodySmall,
+            color = ecuBlueLight,
+            fontWeight = FontWeight.Bold
+        )
+        if (availability.bloques.isEmpty()) {
+            Text("Sin bloques registrados para la fecha.", style = MaterialTheme.typography.bodySmall, color = ecuText)
+        } else {
+            availability.bloques.forEach { block ->
+                Text(
+                    "${block.inicio}-${block.fin} · ${block.titulo} · ${availabilityBlockStatusLabel(block.estado)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ecuText
+                )
             }
         }
     }
@@ -1180,6 +1285,36 @@ private fun meetingStatusColor(meeting: MeetingDto): Color = when (meeting.displ
     "Cancelada" -> canceledColor
     else -> ecuAccent
 }
+
+private fun availabilityStatusLabel(status: String): String = when (status) {
+    "disponible" -> "Disponible"
+    "ocupado_parcial" -> "Ocupado parcial"
+    "ocupado_total" -> "Ocupado total"
+    "sin_datos" -> "Sin datos"
+    else -> status
+}
+
+private fun availabilityBlockStatusLabel(status: String): String = when (status) {
+    "ocupado" -> "ocupado"
+    "pendiente" -> "pendiente"
+    "rechazado" -> "rechazado"
+    else -> status
+}
+
+private fun availabilityHasConflict(
+    availability: Collection<UserAvailabilityDto>,
+    start: String,
+    end: String,
+    excludingMeetingId: Int? = null
+): Boolean =
+    availability.any { user ->
+        user.bloques.any { block ->
+            block.estado != "rechazado" &&
+                block.reunion_id != excludingMeetingId &&
+                start < block.fin &&
+                block.inicio < end
+        }
+    }
 
 private fun buildMonthGrid(month: YearMonth): List<LocalDate?> {
     val firstDay = month.atDay(1)
