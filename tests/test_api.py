@@ -116,6 +116,21 @@ def test_secretaria_puede_convocar_otra_area(client, app):
     assert response.status_code == 201
 
 
+def test_web_api_disponibilidad_usuarios_devuelve_bloques(client):
+    headers = login(client, "secretaria.general@empresa.local", "Agenda123!")
+    created = client.post("/api/reuniones", json=_meeting_payload([3], zone_id=2), headers=headers).get_json()
+
+    response = client.get(f"/api/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=3", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["fecha"] == _future_day()
+    assert payload["usuarios_no_encontrados"] == []
+    assert payload["usuarios"][0]["id"] == 3
+    assert payload["usuarios"][0]["bloques"][0]["reunion_id"] == created["id"]
+    assert payload["usuarios"][0]["bloques"][0]["inicio"] == "09:00"
+
+
 def test_usuario_natural_no_puede_crear_reunion(client, app):
     headers = login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
     response = client.post("/api/reuniones", json=_meeting_payload([4], zone_id=2), headers=headers)

@@ -1,6 +1,10 @@
 from datetime import date, timedelta
 
+from app.constants import ROLE_AGENDADOR
+from app.extensions import db
+from app.models import Role
 from app.models import Usuario, ZonaReunion
+from app.security import hash_password
 from app.services.notifications import dispatch_pending_notifications
 from app.services.meeting_requests import create_meeting_request
 
@@ -33,6 +37,27 @@ def api_login(client, correo, password):
     response = client.post("/api/auth/login", json={"correo": correo, "password": password})
     assert response.status_code == 200
     return {"X-CSRF-Token": response.get_json()["csrf_token"]}
+
+
+def ensure_mobile_agendador(app):
+    with app.app_context():
+        role = Role.query.filter_by(nombre=ROLE_AGENDADOR).first()
+        if not role:
+            role = Role(nombre=ROLE_AGENDADOR)
+            db.session.add(role)
+            db.session.flush()
+        user = Usuario.query.filter_by(correo="encargado.mobile@empresa.local").first()
+        if not user:
+            user = Usuario(
+                nombre="Encargado Mobile",
+                correo="encargado.mobile@empresa.local",
+                telefono="0991234567",
+                password_hash=hash_password("Encargado123!"),
+                role_id=role.id,
+                area_id=1,
+            )
+            db.session.add(user)
+            db.session.commit()
 
 
 def test_mobile_login_y_me(client):
@@ -116,6 +141,96 @@ def test_mobile_sync_devuelve_reuniones_y_solicitudes(client):
     assert isinstance(payload["reuniones"], list)
     assert isinstance(payload["solicitudes"], list)
     assert payload["server_time"]
+
+
+def test_mobile_secretaria_consulta_disponibilidad_varios_usuarios(client):
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    created = client.post("/api/reuniones", json=_meeting_payload([3, 4]), headers=admin_headers).get_json()
+
+    headers = mobile_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    response = client.get(
+        f"/api/mobile/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=3,4",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["fecha"] == _future_day()
+    assert len(payload["usuarios"]) == 2
+    usuario_3 = next(item for item in payload["usuarios"] if item["id"] == 3)
+    assert usuario_3["reuniones_dia"] == 1
+    assert usuario_3["estado_dia"] == "ocupado_parcial"
+    assert usuario_3["bloques"][0]["reunion_id"] == created["id"]
+    assert usuario_3["bloques"][0]["estado"] == "pendiente"
+    assert usuario_3["bloques"][0]["tipo"] == "reunion"
+
+
+def test_mobile_encargado_consulta_disponibilidad_de_su_area(client, app):
+    ensure_mobile_agendador(app)
+    headers = mobile_login(client, "encargado.mobile@empresa.local", "Encargado123!")
+    response = client.get(
+        f"/api/mobile/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=3,4",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert {item["id"] for item in response.get_json()["usuarios"]} == {3, 4}
+
+
+def test_mobile_encargado_no_consulta_disponibilidad_otra_area(client, app):
+    ensure_mobile_agendador(app)
+    headers = mobile_login(client, "encargado.mobile@empresa.local", "Encargado123!")
+    response = client.get(
+        f"/api/mobile/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=5",
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+def test_mobile_disponibilidad_reuniones_canceladas_no_bloquean(client):
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
+    client.post(f"/api/reuniones/{created['id']}/cancelar", headers=admin_headers)
+
+    headers = mobile_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    response = client.get(
+        f"/api/mobile/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=3",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    usuario = response.get_json()["usuarios"][0]
+    assert usuario["reuniones_dia"] == 0
+    assert usuario["estado_dia"] == "disponible"
+    assert usuario["bloques"] == []
+
+
+def test_mobile_disponibilidad_participante_rechazado_aparece_rechazado(client):
+    admin_headers = api_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    created = client.post("/api/reuniones", json=_meeting_payload([3]), headers=admin_headers).get_json()
+    user_headers = mobile_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+    client.post(f"/api/mobile/reuniones/{created['id']}/rechazar", headers=user_headers, json={"razon": "Cruce"})
+
+    headers = mobile_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    response = client.get(
+        f"/api/mobile/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=3",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    usuario = response.get_json()["usuarios"][0]
+    assert usuario["reuniones_dia"] == 1
+    assert usuario["estado_dia"] == "disponible"
+    assert usuario["bloques"][0]["estado"] == "rechazado"
+
+
+def test_mobile_disponibilidad_reporta_usuarios_inexistentes(client):
+    headers = mobile_login(client, "secretaria.general@empresa.local", "Agenda123!")
+    response = client.get(
+        f"/api/mobile/disponibilidad/usuarios?fecha={_future_day()}&usuario_ids=3,9999",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.get_json()["usuarios_no_encontrados"] == [9999]
 
 
 def test_mobile_detalle_aceptar_y_rechazar(client):

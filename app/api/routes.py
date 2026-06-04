@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, g, jsonify, make_response, request
 
@@ -13,6 +13,7 @@ from app.models import (
     LogSistema,
     Reunion,
     ReunionHistorial,
+    ReunionParticipante,
     ReunionSolicitud,
     Role,
     Usuario,
@@ -170,6 +171,113 @@ def _mobile_visible_requests(actor: Usuario) -> list[ReunionSolicitud]:
     if actor.role.nombre in (ROLE_ADMIN, ROLE_SECRETARIA):
         return query.all()
     return query.filter_by(solicitante_usuario_id=actor.id).all()
+
+
+def _parse_availability_args() -> tuple[date, list[int]]:
+    raw_fecha = (request.args.get("fecha") or "").strip()
+    if not raw_fecha:
+        raise ValidationError("fecha es obligatoria.")
+    try:
+        fecha = date.fromisoformat(raw_fecha)
+    except ValueError as exc:
+        raise ValidationError("fecha debe tener formato YYYY-MM-DD.") from exc
+
+    raw_ids = (request.args.get("usuario_ids") or "").strip()
+    if not raw_ids:
+        raise ValidationError("usuario_ids es obligatorio.")
+    try:
+        user_ids = [int(value.strip()) for value in raw_ids.split(",") if value.strip()]
+    except ValueError as exc:
+        raise ValidationError("usuario_ids debe ser una lista de enteros separados por comas.") from exc
+    if not user_ids:
+        raise ValidationError("usuario_ids es obligatorio.")
+    return fecha, list(dict.fromkeys(user_ids))
+
+
+def _participant_block_status(response_status: str) -> str:
+    if response_status == "Rechazada":
+        return "rechazado"
+    if response_status == "Pendiente":
+        return "pendiente"
+    return "ocupado"
+
+
+def _daily_user_status(blocks: list[dict]) -> str:
+    blocking = [item for item in blocks if item["estado"] in ("ocupado", "pendiente")]
+    if not blocking:
+        return "disponible"
+    occupied_minutes = 0
+    for item in blocking:
+        start = datetime.strptime(item["inicio"], "%H:%M")
+        end = datetime.strptime(item["fin"], "%H:%M")
+        occupied_minutes += int((end - start).total_seconds() // 60)
+    work_start = datetime.strptime(
+        (Configuracion.query.filter_by(clave="horario_laboral_inicio").first() or Configuracion(valor="08:00")).valor,
+        "%H:%M",
+    )
+    work_end = datetime.strptime(
+        (Configuracion.query.filter_by(clave="horario_laboral_fin").first() or Configuracion(valor="17:00")).valor,
+        "%H:%M",
+    )
+    workday_minutes = int((work_end - work_start).total_seconds() // 60)
+    if workday_minutes > 0 and occupied_minutes >= workday_minutes:
+        return "ocupado_total"
+    return "ocupado_parcial"
+
+
+def _availability_payload(actor: Usuario) -> dict:
+    fecha, requested_ids = _parse_availability_args()
+    users = Usuario.query.filter(Usuario.id.in_(requested_ids)).order_by(Usuario.nombre).all()
+    found_ids = {user.id for user in users}
+    missing_ids = [user_id for user_id in requested_ids if user_id not in found_ids]
+
+    if actor.role.nombre not in (ROLE_ADMIN, ROLE_SECRETARIA):
+        forbidden_users = [user for user in users if user.area_id != actor.area_id]
+        if forbidden_users:
+            raise ForbiddenError("No tiene permiso para consultar disponibilidad de usuarios de otra área.")
+
+    participant_rows = (
+        db.session.query(ReunionParticipante)
+        .join(Reunion, Reunion.id == ReunionParticipante.reunion_id)
+        .filter(
+            ReunionParticipante.usuario_id.in_(found_ids),
+            Reunion.fecha == fecha,
+            Reunion.estado != "Cancelada",
+        )
+        .order_by(Reunion.hora_inicio.asc(), Reunion.hora_fin.asc())
+        .all()
+    )
+    blocks_by_user: dict[int, list[dict]] = {user.id: [] for user in users}
+    for row in participant_rows:
+        meeting = row.reunion
+        blocks_by_user.setdefault(row.usuario_id, []).append(
+            {
+                "reunion_id": meeting.id,
+                "titulo": meeting.titulo,
+                "inicio": meeting.hora_inicio.strftime("%H:%M"),
+                "fin": meeting.hora_fin.strftime("%H:%M"),
+                "estado": _participant_block_status(row.estado_respuesta),
+                "tipo": "reunion",
+                "prioridad": meeting.prioridad,
+            }
+        )
+
+    return {
+        "fecha": fecha.isoformat(),
+        "usuarios_no_encontrados": missing_ids,
+        "usuarios": [
+            {
+                "id": user.id,
+                "nombre": user.nombre,
+                "correo": user.correo,
+                "area": {"id": user.area.id, "nombre": user.area.nombre},
+                "reuniones_dia": len(blocks_by_user.get(user.id, [])),
+                "estado_dia": _daily_user_status(blocks_by_user.get(user.id, [])),
+                "bloques": blocks_by_user.get(user.id, []),
+            }
+            for user in users
+        ],
+    }
 
 
 def _get_login_user(payload: dict, channel: str) -> Usuario:
@@ -498,6 +606,18 @@ def mobile_search_users():
         query = query.filter((Usuario.nombre.ilike(like)) | (Usuario.correo.ilike(like)))
     users = query.order_by(Usuario.nombre).limit(20).all()
     return jsonify({"items": [_mobile_user_payload(user) for user in users]})
+
+
+@api_bp.get("/disponibilidad/usuarios")
+@require_auth()
+def user_availability():
+    return jsonify(_availability_payload(g.current_user))
+
+
+@api_bp.get("/mobile/disponibilidad/usuarios")
+@require_auth()
+def mobile_user_availability():
+    return jsonify(_availability_payload(g.current_user))
 
 
 @api_bp.post("/zonas")
