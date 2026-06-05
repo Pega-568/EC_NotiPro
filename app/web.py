@@ -16,6 +16,7 @@ from app.services.meetings import cancel_meeting, create_meeting, serialize_meet
 
 
 web_bp = Blueprint("web", __name__)
+INTERNAL_MEETING_WEB_ROLES = (ROLE_ADMIN, ROLE_SECRETARIA, ROLE_AGENDADOR)
 
 
 def _admin_base_context() -> dict:
@@ -150,6 +151,31 @@ def _selected_participant_cards(participant_ids: list[str]) -> list[dict]:
 
 def _responsable_candidates():
     return Usuario.query.filter_by(estado="Activo").order_by(Usuario.nombre).all()
+
+
+def _internal_meeting_form_context() -> dict:
+    actor = g.current_user
+    zones = ZonaReunion.query.filter_by(estado="Activa").order_by(ZonaReunion.nombre).all()
+    users_query = Usuario.query.filter_by(estado="Activo")
+    if actor.role.nombre == ROLE_AGENDADOR:
+        zones = [zone for zone in zones if zone.area_id in (actor.area_id, None)]
+        users_query = users_query.filter_by(area_id=actor.area_id)
+    return {
+        "zones": zones,
+        "participants": users_query.order_by(Usuario.nombre).all(),
+        "form_data": {
+            "titulo": request.form.get("titulo", ""),
+            "motivo": request.form.get("motivo", ""),
+            "fecha": request.form.get(
+                "fecha",
+                request.args.get("fecha", (date.today() + timedelta(days=1)).isoformat()),
+            ),
+            "hora_inicio": request.form.get("hora_inicio", request.args.get("hora_inicio", "09:00")),
+            "hora_fin": request.form.get("hora_fin", request.args.get("hora_fin", "10:00")),
+            "zona_id": request.form.get("zona_id", request.args.get("zona_id", "")),
+            "participant_ids": request.form.getlist("participant_ids"),
+        },
+    }
 
 
 def _bool_config(key: str, default: bool = False) -> bool:
@@ -719,11 +745,23 @@ def admin_zones_enable(zone_id: int):
 
 
 @web_bp.get("/web/admin/reuniones")
-@require_roles(*OPERATOR_ROLES, api=False)
+@require_roles(ROLE_ADMIN, *OPERATOR_ROLES, api=False)
 def admin_meetings():
     success, error = _request_messages()
     meetings = Reunion.query.order_by(Reunion.fecha.desc(), Reunion.hora_inicio.desc()).all()
     return render_template("admin/meetings.html", meetings=meetings, serialize_meeting=serialize_meeting, success=success, error=error)
+
+
+@web_bp.get("/web/admin/reuniones-internas/nueva")
+@require_roles(*INTERNAL_MEETING_WEB_ROLES, api=False)
+def internal_meetings_new():
+    success, error = _request_messages()
+    return render_template(
+        "admin/internal_meeting_form.html",
+        success=success,
+        error=error,
+        **_internal_meeting_form_context(),
+    )
 
 
 @web_bp.route("/web/admin/reuniones/nueva", methods=["GET", "POST"])
@@ -756,7 +794,7 @@ def admin_meetings_new():
 
 
 @web_bp.get("/web/admin/reuniones/<int:meeting_id>")
-@require_roles(*OPERATOR_ROLES, api=False)
+@require_roles(ROLE_ADMIN, *OPERATOR_ROLES, api=False)
 def admin_meeting_detail(meeting_id: int):
     success, error = _request_messages()
     meeting = Reunion.query.get(meeting_id)

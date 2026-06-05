@@ -29,6 +29,7 @@
           <a href="/web/admin" class="{{ 'is-active' if current_path == '/web/admin' else '' }}"><span class="nav-icon">▦</span><span class="nav-label">Panel</span></a>
           <a href="/web/admin/calendario" class="{{ 'is-active' if current_path.startswith('/web/admin/calendario') else '' }}"><span class="nav-icon">□</span><span class="nav-label">Calendario</span></a>
           <a href="/web/admin/reuniones" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones') else '' }}"><span class="nav-icon">◷</span><span class="nav-label">Reuniones</span></a>
+          <a href="/web/admin/reuniones-internas/nueva" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones-internas') else '' }}"><span class="nav-icon">＋</span><span class="nav-label">Crear reunión interna</span></a>
           <a href="/web/secretaria/solicitudes" class="{{ 'is-active' if current_path.startswith('/web/secretaria/solicitudes') else '' }}"><span class="nav-icon">✉</span><span class="nav-label">Solicitudes</span></a>
           <a href="/web/admin/usuarios" class="{{ 'is-active' if current_path.startswith('/web/admin/usuarios') else '' }}"><span class="nav-icon">◎</span><span class="nav-label">Usuarios</span></a>
           <a href="/web/admin/areas" class="{{ 'is-active' if current_path.startswith('/web/admin/areas') else '' }}"><span class="nav-icon">◇</span><span class="nav-label">Areas</span></a>
@@ -39,11 +40,15 @@
           <a href="/scheduler" class="{{ 'is-active' if current_path == '/scheduler' else '' }}"><span class="nav-icon">▦</span><span class="nav-label">Panel</span></a>
           <a href="/web/admin/calendario" class="{{ 'is-active' if current_path.startswith('/web/admin/calendario') else '' }}"><span class="nav-icon">□</span><span class="nav-label">Calendario</span></a>
           <a href="/web/admin/reuniones" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones') else '' }}"><span class="nav-icon">◷</span><span class="nav-label">Reuniones</span></a>
+          <a href="/web/admin/reuniones-internas/nueva" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones-internas') else '' }}"><span class="nav-icon">＋</span><span class="nav-label">Crear reunión interna</span></a>
           <a href="/web/secretaria/solicitudes" class="{{ 'is-active' if current_path.startswith('/web/secretaria/solicitudes') else '' }}"><span class="nav-icon">✉</span><span class="nav-label">Solicitudes</span></a>
           <a href="/scheduler/usuarios" class="{{ 'is-active' if current_path.startswith('/scheduler/usuarios') else '' }}"><span class="nav-icon">◎</span><span class="nav-label">Participantes</span></a>
           <a href="/scheduler/zonas" class="{{ 'is-active' if current_path.startswith('/scheduler/zonas') else '' }}"><span class="nav-icon">⌖</span><span class="nav-label">Zonas</span></a>
           {% else %}
           <a href="/web/solicitudes" class="{{ 'is-active' if current_path == '/web/solicitudes' else '' }}"><span class="nav-icon">≡</span><span class="nav-label">Mis solicitudes</span></a>
+          {% if role_name == "Agendador de área" %}
+          <a href="/web/admin/reuniones-internas/nueva" class="{{ 'is-active' if current_path.startswith('/web/admin/reuniones-internas') else '' }}"><span class="nav-icon">＋</span><span class="nav-label">Crear reunión interna</span></a>
+          {% endif %}
           <a href="/web/solicitudes/nueva" class="{{ 'is-active' if current_path.startswith('/web/solicitudes/nueva') else '' }}"><span class="nav-icon">＋</span><span class="nav-label">Solicitar</span></a>
           {% endif %}
         </nav>

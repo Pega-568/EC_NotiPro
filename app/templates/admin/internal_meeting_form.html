@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block page_title %}Crear reunion interna | EC_NotiPro{% endblock %}
+{% block header_title %}Crear reunion interna{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="table-tools">
+    <div>
+      <h2 class="section-title">Reunion interna directa</h2>
+      <p class="muted" style="margin: 0;">Prioridad: Baja automatica</p>
+      <p class="muted" style="margin: 0;">No requiere aprobacion de Secretaria</p>
+      <p class="muted" style="margin: 0;">Solo participantes del area correspondiente</p>
+    </div>
+    <a class="btn btn-outline" href="/web/admin/reuniones">Volver</a>
+  </div>
+
+  <form method="post" action="/api/reuniones-internas">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+    <div class="row">
+      <label>Titulo
+        <input type="text" name="titulo" value="{{ form_data.titulo }}" required>
+      </label>
+      <label>Fecha
+        <input type="date" name="fecha" value="{{ form_data.fecha }}" required>
+      </label>
+      <label>Hora inicio
+        <input type="time" name="hora_inicio" value="{{ form_data.hora_inicio }}" required>
+      </label>
+      <label>Hora fin
+        <input type="time" name="hora_fin" value="{{ form_data.hora_fin }}" required>
+      </label>
+      <label>Zona
+        <select name="zona_id" required>
+          <option value="">Seleccione</option>
+          {% for zone in zones %}
+          <option value="{{ zone.id }}" {% if form_data.zona_id|string == zone.id|string %}selected{% endif %}>
+            {{ zone.nombre }} - {{ zone.ubicacion }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <label>Motivo
+      <textarea name="motivo" required>{{ form_data.motivo }}</textarea>
+    </label>
+
+    <section class="panel" style="margin-top: 1rem; padding: 1rem;">
+      <h3>Participantes activos</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seleccionar</th><th>Nombre</th><th>Correo</th><th>Area</th></tr></thead>
+          <tbody>
+            {% for user in participants %}
+            <tr>
+              <td>
+                <input
+                  type="checkbox"
+                  name="participant_ids"
+                  value="{{ user.id }}"
+                  {% if user.id|string in form_data.participant_ids %}checked{% endif %}
+                >
+              </td>
+              <td>{{ user.nombre }}</td>
+              <td>{{ user.correo }}</td>
+              <td>{{ user.area.nombre }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="actions" style="margin-top: 1rem;">
+      <button type="submit">Crear reunion interna</button>
+      <a href="/web/admin/reuniones">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

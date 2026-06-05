@@ -1,11 +1,11 @@
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, current_app, g, jsonify, make_response, request
+from flask import Blueprint, current_app, g, jsonify, make_response, redirect, request, url_for
 
 from app.audit import log_event
 from app.auth import clear_session_cookies, require_auth, require_roles, set_session_cookies
 from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA
-from app.errors import AuthenticationError, ForbiddenError, NotFoundError, ValidationError
+from app.errors import AuthenticationError, ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.extensions import db
 from app.models import (
     Area,
@@ -279,6 +279,23 @@ def _availability_payload(actor: Usuario) -> dict:
             for user in users
         ],
     }
+
+
+def _request_payload() -> dict:
+    if request.form:
+        return {
+            key: request.form.getlist(key) if key == "participant_ids" else request.form.get(key)
+            for key in request.form
+            if key != "csrf_token"
+        }
+    return request.get_json(silent=True) or {}
+
+
+def _friendly_internal_meeting_error(message: str) -> str:
+    lowered = message.lower()
+    if "aprobacion" in lowered or "aprobación" in lowered or "solicitud" in lowered:
+        return "Esta reunión requiere aprobación de Secretaría. Cree una solicitud institucional."
+    return message
 
 
 def _get_login_user(payload: dict, channel: str) -> Usuario:
@@ -714,11 +731,25 @@ def create_meeting_route():
 @api_bp.post("/reuniones-internas")
 @require_auth()
 def create_internal_meeting_route():
-    meeting = create_internal_area_meeting(
-        g.current_user,
-        request.get_json(silent=True) or {},
-        "web",
-    )
+    try:
+        meeting = create_internal_area_meeting(g.current_user, _request_payload(), "web")
+    except (ValidationError, ConflictError, ForbiddenError) as exc:
+        if request.form:
+            return redirect(
+                url_for(
+                    "web.internal_meetings_new",
+                    error=_friendly_internal_meeting_error(exc.message),
+                )
+            )
+        raise
+    if request.form:
+        return redirect(
+            url_for(
+                "web.admin_meeting_detail",
+                meeting_id=meeting.id,
+                success="Reunión interna creada correctamente.",
+            )
+        )
     return jsonify(serialize_meeting(meeting)), 201
 
 
