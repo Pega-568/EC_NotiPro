@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -204,6 +205,7 @@ internal data class MeetingDto(
 }
 
 internal data class MeetingsResponse(val items: List<MeetingDto>)
+internal data class UsersResponse(val items: List<UserDto>)
 internal data class LoginRequest(val correo: String, val password: String)
 internal data class LoginResponse(val access_token: String, val token_type: String, val expires_in_minutes: Int, val user: UserDto)
 internal data class MeResponse(val user: UserDto)
@@ -245,6 +247,12 @@ private interface MobileApi {
 
     @GET("/api/mobile/reuniones")
     suspend fun meetings(): MeetingsResponse
+
+    @GET("/api/mobile/usuarios/buscar")
+    suspend fun searchUsers(
+        @Query("q") query: String,
+        @Query("area_id") areaId: Int? = null
+    ): UsersResponse
 
     @GET("/api/mobile/reuniones/{id}")
     suspend fun meetingDetail(@Path("id") id: Int): MeetingDto
@@ -318,6 +326,8 @@ internal class MobileRepository(private val sessionStore: SessionStore) {
     suspend fun me(): UserDto = handleUnauthorized { api().me().user }
     suspend fun logout() { try { handleUnauthorized { api().logout() } } finally { sessionStore.clearToken() } }
     suspend fun meetings(): List<MeetingDto> = handleUnauthorized { api().meetings().items.sortedBy { it.localDate().toString() + it.hora_inicio } }
+    suspend fun searchUsers(query: String, areaId: Int?): List<UserDto> =
+        handleUnauthorized { api().searchUsers(query, areaId).items }
     suspend fun meetingDetail(id: Int): MeetingDto = handleUnauthorized { api().meetingDetail(id) }
     suspend fun accept(id: Int): MeetingDto = handleUnauthorized { api().accept(id) }
     suspend fun reject(id: Int, reason: String): MeetingDto = handleUnauthorized { api().reject(id, RejectRequest(reason)) }
@@ -370,7 +380,7 @@ private enum class CalendarMode {
 }
 
 private enum class Screen {
-    LOGIN, HOME, PENDING, CALENDAR, HISTORY, DETAIL, REJECT, PROFILE
+    LOGIN, HOME, MY_MEETINGS, AREA_MEETINGS, AVAILABILITY, PENDING, CALENDAR, HISTORY, DETAIL, REJECT, PROFILE
 }
 
 private data class AppUiState(
@@ -388,6 +398,11 @@ private data class AppUiState(
     val pushStatus: String? = null,
     val availabilityByUser: Map<Int, UserAvailabilityDto> = emptyMap(),
     val availabilityMessage: String? = null,
+    val availabilityDate: LocalDate = LocalDate.now(),
+    val availabilitySearchQuery: String = "",
+    val availabilitySearchResults: List<UserDto> = emptyList(),
+    val selectedAvailabilityUsers: List<UserDto> = emptyList(),
+    val availabilityReport: UserAvailabilityResponse? = null,
 )
 
 private class AppViewModel(private val sessionStore: SessionStore) : ViewModel() {
@@ -412,6 +427,8 @@ private class AppViewModel(private val sessionStore: SessionStore) : ViewModel()
     fun selectCalendarDay(day: LocalDate) { _uiState.value = _uiState.value.copy(selectedCalendarDay = day) }
     fun setCalendarMode(mode: CalendarMode) { _uiState.value = _uiState.value.copy(calendarMode = mode) }
     fun setPushStatus(status: String) { _uiState.value = _uiState.value.copy(pushStatus = status) }
+    fun updateAvailabilityDate(value: LocalDate) { _uiState.value = _uiState.value.copy(availabilityDate = value) }
+    fun updateAvailabilitySearchQuery(value: String) { _uiState.value = _uiState.value.copy(availabilitySearchQuery = value) }
 
     fun login(correo: String, password: String) {
         launchSafe {
@@ -438,6 +455,44 @@ private class AppViewModel(private val sessionStore: SessionStore) : ViewModel()
                 meetings = meetings,
                 currentScreen = if (_uiState.value.currentScreen == Screen.LOGIN) Screen.HOME else _uiState.value.currentScreen,
                 selectedCalendarDay = LocalDate.now()
+            )
+        }
+    }
+
+    fun searchAvailabilityUsers() {
+        launchSafe {
+            val state = _uiState.value
+            val user = state.currentUser ?: return@launchSafe
+            val areaId = if (canSearchOnlyOwnArea(user)) user.area.id else null
+            val results = repository.searchUsers(state.availabilitySearchQuery, areaId)
+            _uiState.value = _uiState.value.copy(availabilitySearchResults = results)
+        }
+    }
+
+    fun toggleAvailabilityUser(user: UserDto) {
+        val selected = _uiState.value.selectedAvailabilityUsers.toMutableList()
+        val index = selected.indexOfFirst { it.id == user.id }
+        if (index >= 0) selected.removeAt(index) else selected.add(user)
+        _uiState.value = _uiState.value.copy(
+            selectedAvailabilityUsers = selected.sortedBy { it.nombre },
+            availabilityReport = null,
+            availabilityMessage = null,
+        )
+    }
+
+    fun loadAvailabilityReport() {
+        launchSafe {
+            val state = _uiState.value
+            val ids = state.selectedAvailabilityUsers.map { it.id }
+            require(ids.isNotEmpty()) { "Seleccione al menos un usuario para consultar disponibilidad." }
+            val response = repository.userAvailability(state.availabilityDate.format(isoDateFormatter), ids)
+            _uiState.value = _uiState.value.copy(
+                availabilityReport = response,
+                availabilityMessage = if (response.usuarios_no_encontrados.isNotEmpty()) {
+                    "No se encontro disponibilidad para algunos usuarios."
+                } else {
+                    null
+                }
             )
         }
     }
@@ -598,7 +653,16 @@ private fun AppRoot(viewModel: AppViewModel) {
         }
     }
 
-    val showBottomBar = uiState.currentScreen in setOf(Screen.HOME, Screen.PENDING, Screen.CALENDAR, Screen.HISTORY, Screen.PROFILE)
+    val showBottomBar = uiState.currentScreen in setOf(
+        Screen.HOME,
+        Screen.MY_MEETINGS,
+        Screen.AREA_MEETINGS,
+        Screen.AVAILABILITY,
+        Screen.PENDING,
+        Screen.CALENDAR,
+        Screen.HISTORY,
+        Screen.PROFILE
+    )
 
     Scaffold(
         topBar = {
@@ -610,13 +674,7 @@ private fun AppRoot(viewModel: AppViewModel) {
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(containerColor = Color.White) {
-                    listOf(
-                        Screen.HOME to "Inicio",
-                        Screen.PENDING to "Pendientes",
-                        Screen.CALENDAR to "Calendario",
-                        Screen.HISTORY to "Historial",
-                        Screen.PROFILE to "Perfil"
-                    ).forEach { (screen, label) ->
+                    navigationItemsFor(uiState.currentUser).forEach { (screen, label) ->
                         NavigationBarItem(
                             selected = uiState.currentScreen == screen,
                             onClick = { viewModel.navigate(screen) },
@@ -637,6 +695,9 @@ private fun AppRoot(viewModel: AppViewModel) {
             when (uiState.currentScreen) {
                 Screen.LOGIN -> LoginScreen(uiState, viewModel)
                 Screen.HOME -> HomeScreen(uiState, viewModel)
+                Screen.MY_MEETINGS -> MyMeetingsScreen(uiState, viewModel)
+                Screen.AREA_MEETINGS -> AreaMeetingsScreen(uiState, viewModel)
+                Screen.AVAILABILITY -> AvailabilityScreen(uiState, viewModel)
                 Screen.PENDING -> PendingScreen(uiState, viewModel)
                 Screen.CALENDAR -> CalendarScreen(uiState, viewModel)
                 Screen.HISTORY -> HistoryScreen(uiState, viewModel)
@@ -655,6 +716,9 @@ private fun AppRoot(viewModel: AppViewModel) {
 private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.LOGIN -> "Ecuamatriz"
     Screen.HOME -> "Inicio"
+    Screen.MY_MEETINGS -> "Mis reuniones"
+    Screen.AREA_MEETINGS -> "Reuniones de mi área"
+    Screen.AVAILABILITY -> "Disponibilidad"
     Screen.PENDING -> "Pendientes"
     Screen.CALENDAR -> "Calendario"
     Screen.HISTORY -> "Historial"
@@ -662,6 +726,26 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.REJECT -> "Rechazar reunión"
     Screen.PROFILE -> "Perfil"
 }
+
+private fun navigationItemsFor(user: UserDto?): List<Pair<Screen, String>> {
+    val items = mutableListOf(
+        Screen.HOME to "Inicio",
+        Screen.MY_MEETINGS to "Mías",
+    )
+    if (canViewAreaMeetings(user)) items.add(Screen.AREA_MEETINGS to "Área")
+    items.add(Screen.AVAILABILITY to "Disponibilidad")
+    items.add(Screen.PENDING to "Pendientes")
+    items.add(Screen.PROFILE to "Perfil")
+    return items
+}
+
+private fun isAreaScheduler(user: UserDto?): Boolean = user?.role == "Agendador de área"
+private fun isSecretary(user: UserDto?): Boolean = user?.role == "Secretaria"
+private fun isAdmin(user: UserDto?): Boolean = user?.role == "Administrador del sistema"
+private fun canCreateInternalMeeting(user: UserDto?): Boolean = isAdmin(user) || isSecretary(user) || isAreaScheduler(user)
+private fun canViewAreaMeetings(user: UserDto?): Boolean = canCreateInternalMeeting(user)
+private fun canViewSecretaryRequests(user: UserDto?): Boolean = isAdmin(user) || isSecretary(user)
+private fun canSearchOnlyOwnArea(user: UserDto?): Boolean = !isAdmin(user) && !isSecretary(user)
 
 @Composable
 private fun LoginScreen(uiState: AppUiState, viewModel: AppViewModel) {
@@ -787,8 +871,23 @@ private fun HomeScreen(uiState: AppUiState, viewModel: AppViewModel) {
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                QuickAction("Pendientes", ecuBlueLight, Modifier.weight(1f)) { viewModel.navigate(Screen.PENDING) }
-                QuickAction("Calendario", ecuAccent, Modifier.weight(1f)) { viewModel.navigate(Screen.CALENDAR) }
+                QuickAction("Mis reuniones", ecuBlueLight, Modifier.weight(1f)) { viewModel.navigate(Screen.MY_MEETINGS) }
+                QuickAction("Disponibilidad", ecuAccent, Modifier.weight(1f)) { viewModel.navigate(Screen.AVAILABILITY) }
+            }
+        }
+        if (canViewAreaMeetings(uiState.currentUser)) {
+            item {
+                QuickAction("Reuniones de mi área", ecuBlue, Modifier.fillMaxWidth()) { viewModel.navigate(Screen.AREA_MEETINGS) }
+            }
+        }
+        if (canCreateInternalMeeting(uiState.currentUser)) {
+            item {
+                EmptyCard("Crear reunión interna desde móvil queda preparado para una fase posterior.")
+            }
+        }
+        if (canViewSecretaryRequests(uiState.currentUser)) {
+            item {
+                EmptyCard("Solicitudes de Secretaría se integrarán como módulo móvil dedicado.")
             }
         }
         item {
@@ -847,6 +946,230 @@ private fun SectionHeader(title: String, action: String? = null, onAction: (() -
 private fun QuickAction(label: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = color)) {
         Text(label, color = if (color == ecuAccent) ecuBlue else Color.White, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun MyMeetingsScreen(uiState: AppUiState, viewModel: AppViewModel) {
+    var filter by remember { mutableStateOf("hoy") }
+    val today = LocalDate.now()
+    val weekEnd = today.plusDays(7)
+    val filtered = when (filter) {
+        "semana" -> uiState.meetings.filter { it.localDate() in today..weekEnd }
+        "pendientes" -> uiState.meetings.filter { it.mi_respuesta == "Pendiente" && it.estado != "Cancelada" }
+        else -> uiState.meetings.filter { it.localDate() == today }
+    }
+
+    MeetingListScreen(
+        title = "Mis reuniones",
+        subtitle = "Reuniones sincronizadas para ${uiState.currentUser?.nombre ?: "su usuario"}.",
+        meetings = filtered,
+        emptyMessage = "No hay reuniones para el filtro seleccionado.",
+        viewModel = viewModel,
+        headerContent = {
+            FilterRow(
+                selected = filter,
+                options = listOf("hoy" to "Hoy", "semana" to "Semana", "pendientes" to "Pendientes"),
+                onSelect = { filter = it }
+            )
+        }
+    )
+}
+
+@Composable
+private fun AreaMeetingsScreen(uiState: AppUiState, viewModel: AppViewModel) {
+    val user = uiState.currentUser
+    val areaMeetings = if (isSecretary(user) || isAdmin(user)) {
+        uiState.meetings
+    } else {
+        uiState.meetings.filter { meeting ->
+            meeting.creador.id == user?.id || meeting.participantes.any { it.usuario_id == user?.id }
+        }
+    }
+    val notice = if (isAreaScheduler(user) || isAdmin(user)) {
+        "Pendiente backend: GET /api/mobile/reuniones-area para filtrar todas las reuniones del área con precisión. Temporalmente se muestran reuniones creadas por usted o donde participa."
+    } else {
+        "Vista operativa de reuniones disponibles en la sincronización móvil."
+    }
+
+    MeetingListScreen(
+        title = "Reuniones de mi área",
+        subtitle = notice,
+        meetings = areaMeetings,
+        emptyMessage = "No hay reuniones de área disponibles en la sincronización actual.",
+        viewModel = viewModel,
+    )
+}
+
+@Composable
+private fun AvailabilityScreen(uiState: AppUiState, viewModel: AppViewModel) {
+    var dateText by remember(uiState.availabilityDate) { mutableStateOf(uiState.availabilityDate.format(isoDateFormatter)) }
+    val selectedIds = uiState.selectedAvailabilityUsers.map { it.id }.toSet()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Disponibilidad", style = MaterialTheme.typography.titleLarge, color = ecuBlue)
+            Text("Consulte bloques diarios antes de crear o solicitar una reunión.", color = ecuText)
+        }
+        item {
+            OutlinedTextField(
+                value = dateText,
+                onValueChange = { value ->
+                    dateText = value
+                    runCatching { LocalDate.parse(value, isoDateFormatter) }.getOrNull()?.let { viewModel.updateAvailabilityDate(it) }
+                },
+                label = { Text("Fecha YYYY-MM-DD") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = uiState.availabilitySearchQuery,
+                    onValueChange = { viewModel.updateAvailabilitySearchQuery(it) },
+                    label = { Text("Buscar usuario") },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { viewModel.searchAvailabilityUsers() },
+                    colors = ButtonDefaults.buttonColors(containerColor = ecuBlueLight),
+                    modifier = Modifier.align(Alignment.CenterVertically)
+                ) { Text("Buscar") }
+            }
+        }
+        if (uiState.availabilitySearchResults.isNotEmpty()) {
+            item { SectionHeader("Usuarios encontrados") }
+            items(uiState.availabilitySearchResults) { user ->
+                UserSelectionRow(
+                    user = user,
+                    selected = user.id in selectedIds,
+                    onToggle = { viewModel.toggleAvailabilityUser(user) }
+                )
+            }
+        }
+        item {
+            SectionHeader("Seleccionados")
+            if (uiState.selectedAvailabilityUsers.isEmpty()) {
+                EmptyCard("Seleccione usuarios para consultar disponibilidad.")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    uiState.selectedAvailabilityUsers.forEach { user ->
+                        UserSelectionRow(user = user, selected = true, onToggle = { viewModel.toggleAvailabilityUser(user) })
+                    }
+                    Button(
+                        onClick = { viewModel.loadAvailabilityReport() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = ecuBlueLight)
+                    ) { Text("Consultar disponibilidad") }
+                }
+            }
+        }
+        uiState.availabilityMessage?.let { message ->
+            item {
+                Surface(shape = RoundedCornerShape(18.dp), color = pendingColor.copy(alpha = 0.22f)) {
+                    Text(message, modifier = Modifier.padding(14.dp), color = ecuText)
+                }
+            }
+        }
+        uiState.availabilityReport?.usuarios?.let { users ->
+            item { SectionHeader("Bloques del ${uiState.availabilityReport.fecha}") }
+            if (users.isEmpty()) {
+                item { EmptyCard("Sin reuniones registradas para esta fecha.") }
+            } else {
+                items(users) { availability ->
+                    AvailabilityUserCard(availability)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MeetingListScreen(
+    title: String,
+    subtitle: String,
+    meetings: List<MeetingDto>,
+    emptyMessage: String,
+    viewModel: AppViewModel,
+    headerContent: @Composable (() -> Unit)? = null
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(title, style = MaterialTheme.typography.titleLarge, color = ecuBlue)
+            Text(subtitle, color = ecuText)
+        }
+        if (headerContent != null) item { headerContent() }
+        if (meetings.isEmpty()) {
+            item { EmptyCard(emptyMessage) }
+        } else {
+            items(meetings) { meeting ->
+                AgendaMeetingCard(meeting = meeting, onClick = { viewModel.openMeeting(meeting.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterRow(selected: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+    ) {
+        options.forEach { (value, label) ->
+            OutlinedButton(
+                onClick = { onSelect(value) },
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = if (selected == value) ecuBlueLight else ecuBlue
+                )
+            ) { Text(label) }
+        }
+    }
+}
+
+@Composable
+private fun UserSelectionRow(user: UserDto, selected: Boolean, onToggle: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, ecuBorder)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() }
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Checkbox(checked = selected, onCheckedChange = { onToggle() })
+            Column(modifier = Modifier.weight(1f)) {
+                Text(user.nombre, fontWeight = FontWeight.Bold, color = ecuText)
+                Text("${user.area.nombre} · ${user.correo}", style = MaterialTheme.typography.bodySmall, color = ecuText)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AvailabilityUserCard(availability: UserAvailabilityDto) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, ecuBorder)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(availability.nombre, fontWeight = FontWeight.Bold, color = ecuText)
+            Text("${availabilityStatusLabel(availability.estado_dia)} · ${availability.reuniones_dia} reuniones", color = ecuBlueLight)
+            if (availability.bloques.isEmpty()) {
+                Text("Sin reuniones registradas para esta fecha.", color = ecuText)
+            } else {
+                availability.bloques.forEach { block ->
+                    Text("${block.inicio}-${block.fin} · ${block.titulo} · ${availabilityBlockStatusLabel(block.estado)}", color = ecuText)
+                }
+            }
+        }
     }
 }
 
