@@ -1,8 +1,8 @@
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from app.constants import ROLE_AGENDADOR
 from app.extensions import db
-from app.models import Reunion, Role, Usuario
+from app.models import Reunion, ReunionParticipante, Role, Usuario
 from app.security import hash_password
 
 
@@ -70,6 +70,34 @@ def test_colaborador_no_ve_boton_crear_reunion_interna(client):
     assert "Crear reunión interna" not in response.get_data(as_text=True)
 
 
+def test_encargado_ve_mis_reuniones_y_reuniones_de_mi_area(client, app):
+    ensure_agendador(app)
+    web_login(client, "encargado.web@empresa.local", "Encargado123!")
+
+    body = client.get("/web/solicitudes").get_data(as_text=True)
+
+    assert "Mis reuniones" in body
+    assert "Reuniones de mi área" in body
+
+
+def test_colaborador_ve_mis_reuniones_no_reuniones_de_mi_area(client):
+    web_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+
+    body = client.get("/web/solicitudes").get_data(as_text=True)
+
+    assert "Mis reuniones" in body
+    assert "Reuniones de mi área" not in body
+    assert "Crear reunión interna" not in body
+
+
+def test_solicitar_fue_renombrado_a_reunion_institucional(client):
+    web_login(client, "usuario1.contabilidad@empresa.local", "Usuario123!")
+
+    body = client.get("/web/solicitudes").get_data(as_text=True)
+
+    assert "Solicitar reunión institucional" in body
+
+
 def test_encargado_abre_formulario_reunion_interna(client, app):
     ensure_agendador(app)
     web_login(client, "encargado.web@empresa.local", "Encargado123!")
@@ -82,6 +110,17 @@ def test_encargado_abre_formulario_reunion_interna(client, app):
     assert "No requiere aprobacion de Secretaria" in body
     assert "usuario2.contabilidad@empresa.local" in body
     assert "usuario1.mercado@empresa.local" not in body
+
+
+def test_formulario_reunion_interna_renderiza_bloque_disponibilidad(client, app):
+    ensure_agendador(app)
+    web_login(client, "encargado.web@empresa.local", "Encargado123!")
+
+    body = client.get("/web/admin/reuniones-internas/nueva").get_data(as_text=True)
+
+    assert "Disponibilidad de participantes" in body
+    assert "Seleccione participantes para consultar disponibilidad." in body
+    assert "/api/disponibilidad/usuarios" in body
 
 
 def test_encargado_crea_reunion_interna_valida(client, app):
@@ -124,6 +163,46 @@ def test_colaborador_no_puede_acceder_formulario_por_url_directa(client):
     response = client.get("/web/admin/reuniones-internas/nueva")
 
     assert response.status_code == 403
+
+
+def test_encargado_no_puede_acceder_detalle_de_reunion_de_otra_area(client, app):
+    ensure_agendador(app)
+    with app.app_context():
+        meeting = Reunion(
+            titulo="Solo mercado",
+            motivo="Privada de otra area",
+            creador_id=5,
+            responsable_reunion_id=5,
+            area_origen_id=2,
+            zona_id=1,
+            fecha=date.today() + timedelta(days=3),
+            hora_inicio=time(9, 0),
+            hora_fin=time(10, 0),
+            estado="Pendiente",
+            prioridad="Baja",
+        )
+        db.session.add(meeting)
+        db.session.flush()
+        db.session.add(ReunionParticipante(reunion_id=meeting.id, usuario_id=5))
+        db.session.commit()
+        meeting_id = meeting.id
+
+    web_login(client, "encargado.web@empresa.local", "Encargado123!")
+    response = client.get(f"/web/admin/reuniones/{meeting_id}")
+
+    assert response.status_code == 403
+
+
+def test_endpoint_disponibilidad_web_responde_usuario_del_area(client, app):
+    ensure_agendador(app)
+    web_login(client, "encargado.web@empresa.local", "Encargado123!")
+
+    response = client.get(f"/api/disponibilidad/usuarios?fecha={future_day()}&usuario_ids=3")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["usuarios"][0]["id"] == 3
+    assert payload["usuarios"][0]["area"]["nombre"] == "Contabilidad"
 
 
 def test_secretaria_y_admin_pueden_acceder_formulario_reunion_interna(client):

@@ -1,15 +1,31 @@
 {% extends "base.html" %}
+{% block page_title %}{{ title or "Reuniones" }} | EC_NotiPro{% endblock %}
+{% block header_title %}{{ title or "Reuniones" }}{% endblock %}
 {% block content %}
 <section class="panel">
-  <h2>Reuniones</h2>
-  <table>
-    <thead><tr><th>ID</th><th>Titulo</th><th>Fecha</th><th>Zona</th><th>Estado</th></tr></thead>
-    <tbody>
-      {% for meeting in meetings %}
-      <tr><td>{{ meeting.id }}</td><td>{{ meeting.titulo }}</td><td>{{ meeting.fecha }} {{ meeting.hora_inicio }}</td><td>{{ meeting.zona.nombre }}</td><td>{{ meeting.estado }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <h2 class="section-title">{{ title or "Reuniones" }}</h2>
+  {% if subtitle %}<p class="muted">{{ subtitle }}</p>{% endif %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Titulo</th><th>Fecha</th><th>Hora</th><th>Sala</th><th>Estado</th><th>Prioridad</th><th>Acciones</th></tr></thead>
+      <tbody>
+        {% for meeting in meetings %}
+        {% set item = serialize_meeting(meeting) if serialize_meeting is defined else none %}
+        <tr>
+          <td>{{ meeting.id }}</td>
+          <td><strong>{{ item.titulo if item else meeting.titulo }}</strong></td>
+          <td>{{ item.fecha if item else meeting.fecha }}</td>
+          <td>{{ item.hora_inicio if item else meeting.hora_inicio }} - {{ item.hora_fin if item else meeting.hora_fin }}</td>
+          <td>{{ item.zona_nombre if item else meeting.zona.nombre }}</td>
+          <td><span class="badge {{ 'danger' if meeting.estado in ('Cancelada', 'Rechazada') else 'success' if meeting.estado in ('Aceptada', 'Finalizada') else 'warning' }}">{{ meeting.estado }}</span></td>
+          <td>{{ meeting.prioridad }}</td>
+          <td><a class="btn btn-outline btn-compact" href="/web/admin/reuniones/{{ meeting.id }}">Detalle</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No hay reuniones para mostrar.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
-

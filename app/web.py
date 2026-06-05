@@ -10,7 +10,8 @@ from app.auth import clear_session_cookies, require_auth, require_roles, set_ses
 from app.constants import OPERATOR_ROLES, ROLE_ADMIN, ROLE_COLABORADOR, ROLE_SECRETARIA, ROLE_AGENDADOR
 from app.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.extensions import db
-from app.models import Area, Configuracion, LogSistema, Reunion, Role, Usuario, ZonaReunion
+from app.models import Area, Configuracion, LogSistema, Reunion, ReunionParticipante, Role, Usuario, ZonaReunion
+from app.permissions import ensure_meeting_access
 from app.security import hash_password, issue_session, verify_password
 from app.services.meetings import cancel_meeting, create_meeting, serialize_meeting, update_meeting
 
@@ -176,6 +177,50 @@ def _internal_meeting_form_context() -> dict:
             "participant_ids": request.form.getlist("participant_ids"),
         },
     }
+
+
+def _meeting_is_related_to_actor_area(meeting: Reunion) -> bool:
+    actor = g.current_user
+    if meeting.creador.area_id == actor.area_id or meeting.responsable.area_id == actor.area_id:
+        return True
+    return any(participant.usuario.area_id == actor.area_id for participant in meeting.participantes)
+
+
+def _ensure_web_meeting_access(meeting: Reunion) -> None:
+    if not meeting:
+        raise NotFoundError("Reunion no encontrada.")
+    actor = g.current_user
+    if actor.role.nombre in (ROLE_ADMIN, ROLE_SECRETARIA):
+        return
+    if actor.role.nombre == ROLE_AGENDADOR:
+        if _meeting_is_related_to_actor_area(meeting):
+            return
+        raise ForbiddenError("No tiene permiso para ver reuniones de otra area.")
+    ensure_meeting_access(meeting)
+
+
+def _my_meetings_query(actor: Usuario):
+    return (
+        Reunion.query.filter(
+            (Reunion.creador_id == actor.id)
+            | (Reunion.responsable_reunion_id == actor.id)
+            | Reunion.participantes.any(usuario_id=actor.id)
+        )
+        .order_by(Reunion.fecha.desc(), Reunion.hora_inicio.desc())
+    )
+
+
+def _area_meetings_query(actor: Usuario):
+    return (
+        Reunion.query.outerjoin(ReunionParticipante, ReunionParticipante.reunion_id == Reunion.id)
+        .outerjoin(Usuario, Usuario.id == ReunionParticipante.usuario_id)
+        .filter(
+            (Reunion.area_origen_id == actor.area_id)
+            | (Usuario.area_id == actor.area_id)
+        )
+        .order_by(Reunion.fecha.desc(), Reunion.hora_inicio.desc())
+        .distinct()
+    )
 
 
 def _bool_config(key: str, default: bool = False) -> bool:
@@ -794,12 +839,11 @@ def admin_meetings_new():
 
 
 @web_bp.get("/web/admin/reuniones/<int:meeting_id>")
-@require_roles(ROLE_ADMIN, *OPERATOR_ROLES, api=False)
+@require_auth(api=False)
 def admin_meeting_detail(meeting_id: int):
     success, error = _request_messages()
     meeting = Reunion.query.get(meeting_id)
-    if not meeting:
-        raise NotFoundError("Reunion no encontrada.")
+    _ensure_web_meeting_access(meeting)
     related_logs = (
         LogSistema.query.filter(
             (LogSistema.entidad == "reunion")
@@ -918,7 +962,12 @@ def scheduler_users():
 @require_roles(ROLE_SECRETARIA, api=False)
 def scheduler_meetings():
     meetings = Reunion.query.order_by(Reunion.fecha.desc()).all()
-    return render_template("scheduler/meetings.html", meetings=meetings)
+    return render_template(
+        "scheduler/meetings.html",
+        title="Reuniones",
+        meetings=meetings,
+        serialize_meeting=serialize_meeting,
+    )
 
 
 @web_bp.get("/scheduler/respuestas")
@@ -938,8 +987,38 @@ def scheduler_zones():
 @web_bp.get("/mis-reuniones")
 @require_auth(api=False)
 def user_dashboard():
-    meetings = Reunion.query.filter(Reunion.participantes.any(usuario_id=g.current_user.id)).all()
-    return render_template("scheduler/meetings.html", meetings=meetings)
+    success, error = _request_messages()
+    meetings = _my_meetings_query(g.current_user).all()
+    return render_template(
+        "scheduler/meetings.html",
+        title="Mis reuniones",
+        meetings=meetings,
+        serialize_meeting=serialize_meeting,
+        success=success,
+        error=error,
+    )
+
+
+@web_bp.get("/web/reuniones/mi-area")
+@require_roles(ROLE_ADMIN, ROLE_SECRETARIA, ROLE_AGENDADOR, api=False)
+def area_meetings():
+    success, error = _request_messages()
+    actor = g.current_user
+    if actor.role.nombre in (ROLE_ADMIN, ROLE_SECRETARIA):
+        meetings = Reunion.query.order_by(Reunion.fecha.desc(), Reunion.hora_inicio.desc()).all()
+        scope_label = "Reuniones por area"
+    else:
+        meetings = _area_meetings_query(actor).all()
+        scope_label = f"Reuniones de {actor.area.nombre}"
+    return render_template(
+        "scheduler/meetings.html",
+        title="Reuniones de mi area",
+        subtitle=scope_label,
+        meetings=meetings,
+        serialize_meeting=serialize_meeting,
+        success=success,
+        error=error,
+    )
 
 
 @web_bp.get("/api/web/availability")

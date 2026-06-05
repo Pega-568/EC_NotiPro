@@ -16,6 +16,7 @@
   </div>
   <p><strong>Motivo:</strong><br>{{ meeting_data.motivo }}</p>
   <div class="actions">
+    {% if g.current_user.role.nombre in ("Secretaria", "Agendador de área") %}
     <a class="btn btn-primary" href="/web/admin/reuniones/{{ meeting.id }}/editar">Editar reunion</a>
     {% if meeting.estado != "Cancelada" %}
     <form class="inline-form" method="post" action="/web/admin/reuniones/{{ meeting.id }}/cancelar" data-confirm="¿Confirma la cancelación de esta reunión?">
@@ -23,7 +24,12 @@
       <button type="submit" class="btn-danger">Cancelar reunion</button>
     </form>
     {% endif %}
+    {% endif %}
+    {% if g.current_user.role.nombre in ("Administrador del sistema", "Secretaria", "Agendador de área") %}
     <a class="btn btn-secondary" href="/web/admin/reuniones">Volver al listado</a>
+    {% else %}
+    <a class="btn btn-secondary" href="/mis-reuniones">Volver al listado</a>
+    {% endif %}
   </div>
 </section>
 <section class="panel" style="margin-top: 1rem;">
