@@ -28,6 +28,7 @@ from app.services.meetings import (
     serialize_meeting,
     update_meeting,
 )
+from app.services.internal_meetings import create_internal_area_meeting
 from app.services.notifications import register_device_token
 
 
@@ -710,6 +711,17 @@ def create_meeting_route():
     return jsonify(serialize_meeting(meeting)), 201
 
 
+@api_bp.post("/reuniones-internas")
+@require_auth()
+def create_internal_meeting_route():
+    meeting = create_internal_area_meeting(
+        g.current_user,
+        request.get_json(silent=True) or {},
+        "web",
+    )
+    return jsonify(serialize_meeting(meeting)), 201
+
+
 @api_bp.patch("/reuniones/<int:meeting_id>")
 @require_roles(*OPERATOR_ROLES)
 def update_meeting_route(meeting_id: int):
@@ -754,6 +766,17 @@ def mobile_meetings():
     actor = g.current_user
     meetings = _mobile_visible_meetings(actor)
     return jsonify({"items": [_mobile_meeting_payload(meeting, actor) for meeting in meetings]})
+
+
+@api_bp.post("/mobile/reuniones-internas")
+@require_auth()
+def mobile_create_internal_meeting():
+    meeting = create_internal_area_meeting(
+        g.current_user,
+        request.get_json(silent=True) or {},
+        "mobile",
+    )
+    return jsonify(_mobile_meeting_payload(meeting, g.current_user)), 201
 
 
 @api_bp.get("/mobile/sync")

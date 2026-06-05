@@ -63,6 +63,14 @@ def _humanize(action: str, entity: str, result: str, actor_name: str, detail: di
             f"{actor_name} creo la reunion '{meeting_title}' para el {meeting_date} "
             f"de {start} a {end} en {zone_name} con {names}."
         )
+    if action == "creacion_reunion_interna":
+        names = ", ".join(participant_names) if participant_names else "sin participantes"
+        return (
+            f"{actor_name} creo la reunion interna '{meeting_title}' para el {meeting_date} "
+            f"de {start} a {end} en {zone_name} con {names}."
+        )
+    if action == "rechazo_reunion_interna":
+        return f"Se rechazo la creacion de una reunion interna solicitada por {actor_name}: {detail.get('motivo')}."
     if action == "modificacion_reunion":
         return f"{actor_name} edito la reunion '{meeting_title}'."
     if action == "cancelacion_reunion":
